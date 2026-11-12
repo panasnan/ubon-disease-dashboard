@@ -42,7 +42,7 @@ th,td{padding:8px 10px;border-bottom:1px solid var(--bd);text-align:right}th:nth
 <h2 class="s">อัตราป่วยต่อแสนประชากร (สเกลลอการิทึม)</h2><div class="box" id="bars"></div>
 <h2 class="s">ตารางสถานการณ์รายโรค</h2><div class="box"><div class="sc"><table id="tb"></table></div>
 <div class="note">* ประชากรกลางปีคำนวณย้อนจากอัตราป่วยในรายงาน ≈ <span id="pp"></span> คน · ปีก่อน = ยอดในคอลัมน์กลางของสไลด์ (ควรยืนยันว่าเป็นช่วงเวลาใด)</div>
-<div class="note warn">⚠ ไข้เลือดออก: สไลด์ระบุตาย 2 ราย แต่ CFR 0.14% (คำนวณจาก 2/714 ได้ 0.28%) ควรตรวจสอบตัวเลข · ไฟล์ Excel ไม่มีข้อมูลไข้เลือดออก ใช้ค่าจากสไลด์</div></div>
+</div>
 </section>
 <section id="p2" class="hide">
 <div class="cards" id="c2"></div>
@@ -53,20 +53,20 @@ th,td{padding:8px 10px;border-bottom:1px solid var(--bd);text-align:right}th:nth
 </main>
 <script>
 // ---- ข้อมูลจริงจาก Excel/สไลด์ 11 พ.ย. 2569 : [โรค, อังกฤษ, ป่วย, ตาย, อัตราป่วย/แสน, ปีก่อน(ป่วย), ปีก่อน(ตาย)]
-const D=[["ไข้หวัดใหญ่","Influenza",26543,2,1429.57,34518,7],["ปอดอักเสบ","Pneumonia",14940,16,804.65,20450,99],["อาหารเป็นพิษ","Food poisoning",7690,0,414.17,11263,0],["มือเท้าปาก","Hand Foot Mouth",3370,0,181.50,3400,0],["ไข้เลือดออก","DF,DHF,DSS",714,2,38.46,1893,1],["เห็ดพิษ","Mushroom Poisoning",855,3,46.05,1080,2],["เมลิออยด์","Melioidosis",303,1,16.32,330,4],["ฉี่หนู","Leptospirosis",158,2,8.51,158,4],["ไข้หูดับ","S. suis",8,2,0.43,4,0],["พิษสุนัขบ้า","Rabies",1,1,0.05,0,0]];
+const D=[["ไข้หวัดใหญ่","Influenza",26543,2,1429.57,34518,7],["ปอดอักเสบ","Pneumonia",14940,16,804.65,20450,99],["อาหารเป็นพิษ","Food poisoning",7690,0,414.17,11263,0],["มือเท้าปาก","Hand Foot Mouth",3370,0,181.50,3400,0],["ไข้เลือดออก","DF,DHF,DSS",1037,1,55.85,1893,1],["เห็ดพิษ","Mushroom Poisoning",855,3,46.05,1080,2],["เมลิออยด์","Melioidosis",303,1,16.32,330,4],["ฉี่หนู","Leptospirosis",158,2,8.51,158,4],["ไข้หูดับ","S. suis",8,2,0.43,4,0],["พิษสุนัขบ้า","Rabies",1,1,0.05,0,0]];
 // [อำเภอ, %รพ., %สสอ., แห่ง]
 const H=[["กุดข้าวปุ้น",90.72,90.72,"8/8"],["เขมราฐ",99.16,99.16,"10/10"],["เขื่องใน",99.29,99.29,"17/30"],["โขงเจียม",99.09,99.09,"9/9"],["ดอนมดแดง",100,100,"4/4"],["เดชอุดม",98.96,98.96,"25/25"],["ตระการพืชผล",99.93,99.93,"19/29"],["ตาลสุม",98.68,98.68,"7/7"],["ทุ่งศรีอุดม",99.18,99.18,"4/6"],["นาจะหลวย",99.95,99.95,"9/9"],["นาตาล",94.81,94.81,"6/6"],["นาเยีย",97.01,97.01,"3/5"],["น้ำขุ่น",99.67,99.67,"2/6"],["น้ำยืน",92.74,92.74,"10/10"],["บุณฑริก",99.96,99.96,"16/16"],["พิบูลมังสาหาร",99.76,99.76,"19/19"],["โพธิ์ไทร",99.86,99.86,"10/10"],["ม่วงสามสิบ",96.76,96.76,"23/23"],["เมืองอุบลราชธานี",90.81,90.81,"20/28"],["วารินชำราบ",99.99,99.99,"22/22"],["ศรีเมืองใหม่",97.89,97.89,"14/14"],["สว่างวีระวงศ์",99.98,99.98,"6/7"],["สำโรง",100,100,"12/12"],["สิรินธร",92.84,92.84,"7/7"],["เหล่าเสือโก้ก",94.88,94.88,"5/6"],["สรรพสิทธิประสงค์",57.76,null,"CMU 7 แห่ง"]];
 const L=[["เขื่องใน",90.72,"9/17"],["โขงเจียม",99.16,"7/7"],["ดอนมดแดง",99.29,"4/4"],["ตระการพืชผล",99.09,"2/8"],["ตาลสุม",100,"3/3"],["นาจะหลวย",98.96,"2/2"],["นาตาล",99.93,"1/1"],["นาเยีย",98.68,"3/5"],["บุณฑริก",99.18,"2/2"],["พิบูลมังสาหาร",99.95,"3/3"],["ม่วงสามสิบ",94.81,"9/9"],["เมืองอุบลราชธานี",97.01,"0/8"],["วารินชำราบ",99.67,"7/7"],["ศรีเมืองใหม่",92.74,"8/8"],["สว่างวีระวงศ์",99.96,"1/1"],["เหล่าเสือโก้ก",99.76,"5/6"]];
 const f=n=>n.toLocaleString('th-TH'),col=v=>v==null?'#94a3b8':v>=98?'#16a34a':v>=95?'#f59e0b':'#dc2626';
 const POP=D[0][2]/D[0][4]*1e5,T=D.reduce((s,d)=>s+d[2],0),M=D.reduce((s,d)=>s+d[3],0),TP=D.reduce((s,d)=>s+d[5],0);
 pp.textContent=f(Math.round(POP));
-const top=[...D].sort((a,b)=>b[4]-a[4])[0],cf=[...D].filter(d=>d[2]>=5).sort((a,b)=>b[3]/b[2]-a[3]/a[2])[0];
+const tp=[...D].sort((a,b)=>b[4]-a[4])[0],cf=[...D].filter(d=>d[2]>=5).sort((a,b)=>b[3]/b[2]-a[3]/a[2])[0];
 cards.innerHTML=`
 <div class="k"><div class="h g1">ผู้ป่วยรวม 10 โรค<small>สะสมปี 2569</small></div><div class="b"><div class="big" style="color:#16a34a">${f(T)}</div><div class="u">ราย · ปีก่อน ${f(TP)} (${((T-TP)/TP*100).toFixed(1)}%)</div></div></div>
 <div class="k"><div class="h r">ผู้เสียชีวิตรวม</div><div class="b"><div class="big" style="color:#dc2626">${f(M)}</div><div class="u">ราย · อัตราป่วยตายรวม ${(M/T*100).toFixed(2)}%</div></div></div>
-<div class="k"><div class="h p">อัตราป่วยสูงสุด</div><div class="b"><div class="big" style="color:#a855f7;font-size:2rem">${top[0]}</div><div class="u">${top[4].toFixed(2)} ต่อแสน ปชก.</div></div></div>
+<div class="k"><div class="h p">อัตราป่วยสูงสุด</div><div class="b"><div class="big" style="color:#a855f7;font-size:2rem">${tp[0]}</div><div class="u">${tp[4].toFixed(2)} ต่อแสน ปชก.</div></div></div>
 <div class="k"><div class="h y">อัตราป่วยตายสูงสุด (≥5 ราย)</div><div class="b"><div class="big" style="color:#b45309;font-size:2rem">${cf[0]}</div><div class="u">CFR ${(cf[3]/cf[2]*100).toFixed(2)}%</div></div></div>`;
-const mx=Math.log10(1+top[4]);
+const mx=Math.log10(1+tp[4]);
 bars.innerHTML=D.map(d=>`<div class="row"><span>${d[0]}</span><div class="bw"><i style="width:${Math.max(1,Math.log10(1+d[4])/mx*100)}%;background:#2563eb"></i></div><b style="text-align:right">${d[4].toFixed(2)}</b></div>`).join('');
 tb.innerHTML="<tr><th>#</th><th>โรค</th><th>ป่วย</th><th>ตาย</th><th>อัตราป่วย/แสน</th><th>CFR %</th><th>ปีก่อน (ป่วย)</th><th>เทียบปีก่อน</th></tr>"+D.map((d,i)=>{const c=d[5]?((d[2]-d[5])/d[5]*100):null;return `<tr><td>${i+1}</td><td>${d[0]}<br><small style="color:var(--mut)">${d[1]}</small></td><td>${f(d[2])}</td><td>${d[3]}</td><td>${d[4].toFixed(2)}</td><td>${(d[3]/d[2]*100).toFixed(2)}</td><td>${f(d[5])}</td><td>${c==null?'-':`<span class="tag" style="background:${c>0?'#dc2626':'#16a34a'}">${c>0?'▲':'▼'} ${Math.abs(c).toFixed(1)}%</span>`}</td></tr>`}).join('');
 const bar=v=>v==null?'':`<div class="bw"><i style="width:${v}%;background:${col(v)}"></i></div>`;
