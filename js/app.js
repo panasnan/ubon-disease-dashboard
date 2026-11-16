@@ -148,7 +148,7 @@ function shell() {
     <div class="tb-group"><select id="fdc" aria-label="อำเภอ"><option value="ALL">ทั้งจังหวัด (25 อำเภอ)</option>${[...new Set(DB.districts.map(d => d.zone))].map(z => `${z ? `<optgroup label="${esc(z)}">` : ''}${DB.districts.filter(d => d.zone === z).map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}${z ? '</optgroup>' : ''}`).join('')}</select></div>
     <div class="tb-group"><select id="fd" aria-label="โรค"><option value="ALL">รวม 10 โรค</option>${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
     <div class="tb-group grow">${S.fac && facIndex().get(S.fac) ? `<span class="fac-chip"><button data-fac="${esc(S.fac)}" title="ดูรายละเอียด">${ico('unit', 15)} ${esc(S.fac)} ${esc(facIndex().get(S.fac).name || '')}</button><button id="facx" title="ยกเลิกการเลือกสถานพยาบาล" aria-label="ยกเลิก">${ico('close', 14)}</button></span>` : ''}<div class="search">${ico('search', 16)}<input id="q" type="search" autocomplete="off" placeholder="${S.fac ? 'เปลี่ยนสถานพยาบาล…' : 'ค้นหาสถานพยาบาล: รหัส 5 หลัก หรือชื่อ'}" aria-label="ค้นหาสถานพยาบาล"></div></div>
-    <div class="tb-group tb-tools"><label class="switch" title="ดูด้วยข้อมูลจำลอง"><input type="checkbox" id="fdemo" ${S.demo ? 'checked' : ''}><span></span> จำลอง</label>
+    <div class="tb-group tb-tools">
       <button class="btn ghost sm" id="copylink" title="คัดลอกลิงก์มุมมองนี้">${ico('link', 15)} ลิงก์</button></div>`;
   $('#sidelinks').innerHTML = `<a class="btn ghost w" href="tools/update.html">${ico('upload', 16)} ศูนย์อัปเดตข้อมูล</a>`;
   $('#fdc').value = S.dc; $('#fd').value = S.d;
