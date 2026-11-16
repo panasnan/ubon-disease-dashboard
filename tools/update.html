@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ศูนย์อัปเดตข้อมูลประจำสัปดาห์ | แดชบอร์ด 10 โรค</title>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;600;700&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  main { margin-left: 0; max-width: 1100px; margin-inline: auto; }
+  .step-n { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: var(--blue); color: #fff; font: 700 15px var(--f-head); margin-right: 8px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .row label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .row input { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: 500 14px var(--f-head); }
+  .dl { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .when { font-size: 12.5px; background: #EAF1FF; color: var(--royal); border-radius: 999px; padding: 2px 10px; margin-left: 6px; }
+  .privacy { background: #E2F6EF; border-radius: 12px; padding: 10px 14px; color: #0E5F45; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero"><div><div class="eyebrow">สำหรับผู้ดูแลแดชบอร์ด • ทำงานในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่มีการส่งไฟล์ออกไปที่ใด</div><h1>ศูนย์อัปเดตข้อมูลประจำสัปดาห์</h1><div class="sub">เลือกไฟล์ → ตรวจผล → ดาวน์โหลด CSV → อัปโหลดทับในโฟลเดอร์ data/ บน GitHub</div></div><div class="dl"><a class="btn ghost" href="guide.html">คู่มือผู้ดูแล</a><a class="btn ghost" href="../index.html">แดชบอร์ด</a></div></header>
+  <p class="privacy">🔒 ไฟล์ที่ได้เป็นข้อมูลสรุป ไม่มีชื่อ เลขบัตร อายุ หรือรายละเอียดอาการรายบุคคล จึงอัปโหลดขึ้น GitHub ได้</p>
+
+  <div class="card"><div class="card-h"><h2><span class="step-n">1</span>ไฟล์ Excel "รวบรวมรายงาน" <span class="when">ทุกวันจันทร์</span></h2></div>
+    <p class="muted">อ่านชีต <b>สถานการณ์ 10 โรค</b> (ใช้ทุกสัปดาห์) และถ้ามี จะอ่านชีต <b>ผลงาน DDS ในและนอกสังกัด</b> / <b>ผลงาน DDS อปท.</b> ด้วย</p>
+    <div class="row"><label>ไฟล์ .xlsx<input type="file" id="fA" accept=".xlsx"></label></div>
+    <div id="outA"></div>
+  </div>
+
+  <div class="card"><div class="card-h"><h2><span class="step-n">2</span>ไฟล์ DDS รายเคส (D506) <span class="when">ทุกวันจันทร์</span></h2></div>
+    <p class="muted">ใช้สำหรับแผนที่ รายอำเภอ แนวโน้ม และกลุ่มก้อน — เปิดเครื่องมือรวมไฟล์ DDS (เลือกได้หลายไฟล์พร้อมกัน)</p>
+    <a class="btn" href="convert.html">เปิดเครื่องมือรวม & แปลงไฟล์ DDS →</a>
+  </div>
+
+  <div class="card"><div class="card-h"><h2><span class="step-n">3</span>Outbreak Verification List (.docx) <span class="when">เมื่อมีเหตุการณ์ใหม่</span></h2></div>
+    <p class="muted">ดึงเฉพาะข้อมูลระดับเหตุการณ์ (โรค จำนวนป่วย/ตาย พื้นที่ วันเริ่มป่วย แหล่งข่าว การดำเนินการ สถานะ) — <b>ไม่ดึง</b> อายุ เพศ โรคประจำตัว หรืออาการรายบุคคล</p>
+    <div class="row"><label>ไฟล์ .docx<input type="file" id="fC" accept=".docx"></label></div>
+    <div id="outC"></div>
+  </div>
+
+  <div class="card"><div class="card-h"><h2><span class="step-n">4</span>ความครอบคลุม/ทันเวลารายสถานพยาบาล (Export จาก DDC Dashboard) <span class="when">เดือนละครั้ง</span></h2></div>
+    <p class="muted">เลือกได้หลายไฟล์พร้อมกัน ระบบแยกให้เอง: <b>(ก) ตารางรายสถานพยาบาล</b> (คอลัมน์ อำเภอ, สถานพยาบาล, รายงานแล้ว, รายงานทันเวลา (7 วัน) (n) ...) และ <b>(ข) ตารางสรุปตามประเภทสถานพยาบาล</b> (โรงพยาบาลศูนย์ ... ศูนย์บริการสาธารณสุข อปท.)</p>
+    <p class="muted">⭐ <b>ผลงาน อปท. รายหน่วย:</b> ใน DDC Dashboard เลือกตัวกรอง <b>ประเภทสถานบริการ = ศูนย์บริการสาธารณสุข อปท.</b> แล้ว Export ตาราง (ก) อีกไฟล์ → ใส่ชื่อประเภทในช่องด้านล่าง → ระบบจะติดป้าย "อปท." ให้หน่วยเหล่านั้น และคำนวณความทันเวลาของ อปท. รายอำเภอจากข้อมูลดิบ</p>
+    <div class="row"><label>ไฟล์ .xlsx (เลือกได้หลายไฟล์)<input type="file" id="fD" accept=".xlsx" multiple></label><label>ช่วงข้อมูล (ตามตัวกรองปี/สัปดาห์ใน DDC Dashboard)<input id="periodD" value="ปีงบประมาณ 2569"></label><label>ถ้าไฟล์ (ก) ถูกกรองประเภทไว้ ใส่ชื่อประเภท (ไม่กรอง = เว้นว่าง)<input id="typeD" placeholder="เช่น ศูนย์บริการสาธารณสุข อปท."></label></div>
+    <div id="outD"></div>
+  </div>
+</main>
+<script type="module">
+import { parseCSV, toCSV, fmt } from '../js/data.js';
+import { readWorkbook, readDocxTables } from '../js/xlsx-lite.js';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const CFG = await (await fetch('../data/config.json', { cache: 'no-cache' })).json();
+const DIST = parseCSV(await (await fetch('../data/districts.csv', { cache: 'no-cache' })).text()).records;
+const getCSV = async n => { try { const r = await fetch('../data/' + n, { cache: 'no-cache' }); return r.ok ? parseCSV(await r.text()).records : []; } catch { return []; } };
+const clean = s => String(s || '').replace(/^(อำเภอ|อ\.)\s*/, '').replace(/\s+/g, '');
+const distCode = n => DIST.find(d => clean(d.district_name) === clean(n))?.district_code || '';
+const excelDate = v => { const n = +v; if (n > 20000 && n < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.floor(n) * 864e5).toISOString().slice(0, 10); const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? m[0] : ''; };
+const matchDisease = s => { const l = String(s || '').toLowerCase(); return CFG.diseases.find(d => d.keywords.some(k => l.includes(k.toLowerCase())))?.id || null; };
+const link = (name, header, rows) => { const b = new Blob(['﻿' + toCSV(header, rows)], { type: 'text/csv' }); return `<a class="btn" download="${name}" href="${URL.createObjectURL(b)}">⬇ ${name}</a>`; };
+const issueList = arr => arr.length ? `<ul class="issues">${arr.map(i => `<li class="${i[0]}"><span class="chip ${i[0]}">${{ red: 'ต้องแก้ไข', orange: 'ควรตรวจสอบ', yellow: 'ข้อสังเกต', green: 'ผ่าน' }[i[0]]}</span> ${i[1]}</li>`).join('')}</ul>` : '<div class="empty ok">ตรวจแล้ว ไม่พบปัญหา ✓</div>';
+const TH_M = { 'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4, 'พ.ค.': 5, 'มิ.ย.': 6, 'ก.ค.': 7, 'ส.ค.': 8, 'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12 };
+const thDate = s => { const m = /(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*(\d{2,4})/.exec(s || ''); if (!m) return ''; let y = +m[3]; if (y < 100) y += 2500; return `${y - 543}-${String(TH_M[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`; };
+
+// ---------------- 1. Excel รวบรวมรายงาน ----------------
+$('#fA').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return; $('#outA').innerHTML = 'กำลังอ่าน…';
+  const book = await readWorkbook(f); const iss = []; let html = '';
+  const pop = CFG.population_total;
+  const sh = book.find(s => /สถานการณ์\s*10\s*โรค/.test(s.name)) || book[0];
+  const rows = sh.rows; const hi = rows.findIndex(r => r.some(v => /จำนวนผู้ป่วย/.test(v)));
+  if (hi < 0) { $('#outA').innerHTML = '<div class="notice">ไม่พบหัวตาราง "จำนวนผู้ป่วย" ในชีตแรก</div>'; return; }
+  const H = rows[hi]; const col = re => H.findIndex(v => re.test(v));
+  const cName = col(/^โรค/), cEn = col(/disease/i), cC = col(/จำนวนผู้ป่วย/), cX = col(/เสียชีวิต/), cR = col(/อัตราป่วยต่อแสน|ต่อแสน/), cF = col(/CFR|อัตราป่วยตาย/);
+  let asOf = ''; for (const r of rows) { const k = r.findIndex(v => /อัพเดต|อัปเดต|ข้อมูล ณ/.test(v)); if (k >= 0) { asOf = excelDate(r.slice(k + 1).find(v => v !== '')); break; } }
+  const yearBE = +(sh.name.match(/25\d\d/)?.[0]) || (asOf ? +asOf.slice(0, 4) + 543 : 0);
+  if (!asOf) iss.push(['red', 'ไม่พบวันที่ "อัพเดต" ในชีต — ใส่วันที่ไว้ข้างคำว่า อัพเดต']);
+  if (asOf && (+asOf.slice(0, 4) + 543) !== yearBE) iss.push(['orange', `ปีในชื่อชีต (${yearBE}) ไม่ตรงกับปีของวันที่อัพเดต (${+asOf.slice(0, 4) + 543})`]);
+  const got = [];
+  for (const r of rows.slice(hi + 1)) {
+    const id = matchDisease(r[cName]) || matchDisease(r[cEn]); if (!id) continue;
+    const c = +r[cC], x = +r[cX] || 0, rr = cR >= 0 ? +r[cR] : null, cf = cF >= 0 ? +r[cF] : null;
+    const name = CFG.diseases.find(d => d.id === id).name;
+    if (got.some(g => g.disease_id === id)) iss.push(['red', `${name} มีมากกว่า 1 แถว`]);
+    if (!Number.isInteger(c) || c < 0) iss.push(['red', `${name}: จำนวนผู้ป่วย "${esc(r[cC])}" ไม่ใช่จำนวนเต็ม`]);
+    if (x > c) iss.push(['red', `${name}: เสียชีวิต (${x}) มากกว่าผู้ป่วย (${c})`]);
+    const rCalc = c / pop * 1e5, fCalc = c ? x / c * 100 : 0;
+    if (rr != null && Math.abs(rr - rCalc) > 0.01) iss.push(['orange', `${name}: อัตราป่วยในชีต ${fmt(rr, 2)} แต่คำนวณจาก ${fmt(c)} ÷ ${fmt(pop)} × 100,000 ได้ ${fmt(rCalc, 2)} — ค่าในชีตน่าจะพิมพ์เอง ไม่ใช่สูตร`]);
+    if (cf != null && Math.abs(cf - fCalc) > 0.01) iss.push(['orange', `${name}: CFR ในชีต ${fmt(cf, 2)}% แต่คำนวณได้ ${fmt(fCalc, 2)}%`]);
+    got.push({ disease_id: id, cases: c, deaths: x, reported_rate: rr == null ? '' : rr.toFixed(4), reported_cfr: cf == null ? '' : cf.toFixed(4) });
+  }
+  const miss = CFG.diseases.filter(d => !got.some(g => g.disease_id === d.id)).map(d => d.name);
+  if (miss.length) iss.push(['red', `ไม่พบโรค: ${miss.join(', ')}`]);
+  const label = `พ.ศ. ${yearBE} (1 ม.ค. – ${asOf ? new Date(asOf).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '?'})`;
+  const old = await getCSV('summary_province.csv');
+  const prev = old.filter(o => +o.year_be === yearBE && o.date_to < asOf).sort((a, b) => b.date_to.localeCompare(a.date_to));
+  const prevDate = prev[0]?.date_to;
+  const merged = old.filter(o => !(+o.year_be === yearBE && o.date_to === asOf)).concat(got.map(g => ({ period_label: label, year_type: 'calendar', year_be: yearBE, date_from: `${yearBE - 543}-01-01`, date_to: asOf, ...g, note: '', source: 'Excel รวบรวมรายงาน' })));
+  merged.sort((a, b) => a.year_be - b.year_be || a.date_to.localeCompare(b.date_to));
+  const tc = got.reduce((s, g) => s + g.cases, 0), tx = got.reduce((s, g) => s + g.deaths, 0);
+  html += `<h3>ชีต "${esc(sh.name)}" — ข้อมูล ณ ${esc(asOf)}</h3>
+  <section class="kpis"><div class="kpi"><div class="k-t">ผู้ป่วย 10 โรค</div><div class="k-v blue">${fmt(tc)}</div><div class="k-s">${prevDate ? `สัปดาห์ก่อน (${prevDate}) ${fmt(prev.filter(p => p.date_to === prevDate).reduce((s, p) => s + +p.cases, 0))} ราย` : 'ยังไม่มีข้อมูลสัปดาห์ก่อนในระบบ'}</div></div>
+  <div class="kpi"><div class="k-t">เสียชีวิต</div><div class="k-v red">${fmt(tx)}</div><div class="k-s">CFR ${fmt(tc ? tx / tc * 100 : 0, 2)}%</div></div></section>
+  <table class="tbl"><thead><tr><th>โรค</th><th class="r">ป่วย</th><th class="r">ตาย</th><th class="r">ต่อแสน (คำนวณใหม่)</th><th class="r">เพิ่มจากสัปดาห์ก่อน</th></tr></thead><tbody>
+  ${got.map(g => { const p = prev.find(x => x.date_to === prevDate && x.disease_id === g.disease_id); return `<tr><td>${esc(CFG.diseases.find(d => d.id === g.disease_id).name)}</td><td class="r b">${fmt(g.cases)}</td><td class="r">${fmt(g.deaths)}</td><td class="r">${fmt(g.cases / pop * 1e5, 2)}</td><td class="r">${p ? (g.cases - p.cases >= 0 ? '+' : '') + fmt(g.cases - p.cases) : '–'}</td></tr>`; }).join('')}</tbody></table>
+  ${prev.length && got.some(g => { const p = prev.find(x => x.date_to === prevDate && x.disease_id === g.disease_id); return p && g.cases < +p.cases; }) ? (iss.push(['orange', 'มีโรคที่ยอดสะสมลดลงจากสัปดาห์ก่อน — อาจมีการยกเลิกรายงานซ้ำใน DDS หรือพิมพ์ผิด']), '') : ''}`;
+  const dl = [link('summary_province.csv', ['period_label', 'year_type', 'year_be', 'date_from', 'date_to', 'disease_id', 'cases', 'deaths', 'reported_rate', 'reported_cfr', 'note', 'source'], merged)];
+
+  // sheets 2 & 3 (district reporting performance)
+  const s2 = book.find(s => /ในและนอกสังกัด/.test(s.name)), s3 = book.find(s => /อปท/.test(s.name));
+  if (s2 || s3) {
+    const parse = s => { if (!s) return { rows: [], period: '' }; const period = s.rows.flat().find(v => /สัปดาห์ระบาดวิทยา/.test(v)) || ''; const out = [];
+      for (const r of s.rows) { const code = distCode(r[1]); if (!code) continue; out.push({ code, name: clean(r[1]), r }); } return { rows: out, period: period.trim() }; };
+    const A2 = parse(s2), A3 = parse(s3);
+    const frac = v => { const m = /(\d+)\s*\/\s*(\d+)/.exec(v || ''); return m ? [+m[1], +m[2]] : ['', '']; };
+    const out = DIST.map(d => { const a = A2.rows.find(x => x.code === d.district_code), b = A3.rows.find(x => x.code === d.district_code);
+      const [sr, st] = frac(a?.r[5]); const [lr, lt] = frac(b?.r[4]);
+      return { district_code: d.district_code, district_name: d.district_name, hosp_pct: a ? (+a.r[3]).toFixed(2) : '', sso_pct: a && a.r[4] !== '' && !isNaN(+a.r[4]) ? (+a.r[4]).toFixed(2) : '', sso_reported: sr, sso_total: st, lao_pct: b ? (+b.r[3]).toFixed(2) : '', lao_reported: lr, lao_total: lt, period_label: A2.period || A3.period }; });
+    // integrity: copied columns
+    const v2 = A2.rows.map(x => (+x.r[3]).toFixed(4)), v3 = A3.rows.map(x => (+x.r[3]).toFixed(4));
+    if (v3.length && v3.every((v, i) => v === v2[i])) iss.push(['red', `ชีต "${esc(s3.name)}": ค่า "ผลการดำเนินงาน" ทุกอำเภอเหมือนกับชีต "${esc(s2.name)}" ตามลำดับแถว แต่รายชื่ออำเภอต่างกัน (เช่น ${esc(A3.rows[0].name)} = ${fmt(+A3.rows[0].r[3], 2)} ซึ่งเป็นค่าของ ${esc(A2.rows[0].name)}) — น่าจะคัดลอกผิด ระบบจะไม่แสดงค่าร้อยละของ อปท. จนกว่าจะแก้`]);
+    if (A2.rows.length && A2.rows.every(x => x.r[3] === x.r[4])) iss.push(['yellow', `ชีต "${esc(s2.name)}": ผลการดำเนินงาน รพ. และ สสอ. เท่ากันทุกอำเภอ แต่ยอดรวมต่างกัน — ตรวจว่าคอลัมน์ สสอ. คัดลอกมาจาก รพ. หรือไม่`]);
+    const tgt = s2?.rows.flat().find(v => /ร้อยละ\s*100/.test(v)); if (tgt) iss.push(['yellow', `เป้าหมายในชีตเขียนว่า "${esc(tgt.trim())}" — เกณฑ์กองระบาด: ความทันเวลามากกว่าร้อยละ 80 ตรวจข้อความเป้าหมาย`]);
+    const copied = v3.length && v3.every((v, i) => v === v2[i]);
+    if (copied) out.forEach(o => o.lao_pct = '');
+    dl.push(link('dds_district.csv', ['district_code', 'district_name', 'hosp_pct', 'sso_pct', 'sso_reported', 'sso_total', 'lao_pct', 'lao_reported', 'lao_total', 'period_label'], out));
+    html += `<h3>ผลงาน DDS รายอำเภอ (${esc(A2.period || A3.period)})</h3><p class="muted">อ่านได้ ${A2.rows.length} อำเภอจากชีต ใน/นอกสังกัด และ ${A3.rows.length} อำเภอจากชีต อปท. (แถวที่ไม่ใช่อำเภอ เช่น สรรพสิทธิประสงค์ ไม่นำเข้า)</p>`;
+  }
+  $('#outA').innerHTML = html + '<h3>ผลการตรวจ</h3>' + issueList(iss) + `<div class="dl">${dl.join('')}</div>`;
+};
+
+// ---------------- 3. Outbreak Verification List ----------------
+$('#fC').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return; $('#outC').innerHTML = 'กำลังอ่าน…';
+  const tables = await readDocxTables(f); const iss = []; const ev = [];
+  for (const t of tables) {
+    const h = t[0] || []; if (!h.some(v => /โรค/.test(v))) continue;
+    const ci = re => h.findIndex(v => re.test(v));
+    const cD = ci(/โรค/), cP = ci(/จังหวัด/), cS = ci(/แหล่งข่าว/), cN = ci(/ผลการสอบสวน/), cA = ci(/สิ่งที่ต้องดำเนินการ/);
+    for (const r of t.slice(1)) {
+      const d = r[cD] || '', p = r[cP] || '', s = r[cS] || '', n = r[cN] || '';
+      const dname = d.split(/\n|\//)[0].trim();
+      const type = /กลุ่มก้อน/.test(d) ? 'กลุ่มก้อน' : /เฉพาะราย/.test(d) ? 'เฉพาะราย' : '';
+      const cases = +(/ผู้ป่วย(?:รวมทุกประเภท)?\s*(\d+)\s*ราย/.exec(d)?.[1] || 0);
+      const deaths = +(/(?:ผู้)?เสียชีวิต\s*(\d+)\s*ราย/.exec(d)?.[1] || 0);
+      const prov = p.split('\n')[0].trim();
+      const onset = thDate(p), recv = thDate(s);
+      const src = s.split('\n')[0].trim();
+      const loc = /ตำบล\/แขวง\s*(\S+)\s*อำเภอ\/เขต\s*(\S+)/.exec(n);
+      const act = (/การดำเนินการ\s*\n?([\s\S]*)$/.exec(n)?.[1] || '').trim().slice(0, 240);
+      const id = matchDisease(dname) || (/ไข้เลือดออก|dengue/i.test(dname) ? 'dhf' : '');
+      ev.push({ event_id: `OVL-${(recv || onset).replace(/-/g, '')}-${ev.length + 1}`, disease_id: id, disease_name: dname, event_type: type, province: prov, district_code: /อุบล/.test(prov) && loc ? distCode(loc[2]) : '', subdistrict: loc ? loc[1] : '', village: '', first_onset: onset, last_onset: onset, received: recv, source: src, cases, deaths, status: (r[cA] || '').trim(), action: act, note: '' });
+      if (!onset) iss.push(['orange', `"${esc(dname)}": อ่านวันเริ่มป่วยไม่ได้`]);
+      if (/อุบล/.test(prov) && !loc) iss.push(['orange', `"${esc(dname)}": หาตำบล/อำเภอในข้อความไม่พบ`]);
+    }
+  }
+  const old = await getCSV('mebs_events.csv');
+  const key = e => [e.disease_name, e.province, e.first_onset, e.source].join('|');
+  const merged = old.filter(o => !ev.some(n => key(n) === key(o))).concat(ev);
+  $('#outC').innerHTML = `<h3>พบ ${ev.length} เหตุการณ์</h3><table class="tbl"><thead><tr><th>โรค</th><th>ประเภท</th><th>พื้นที่</th><th class="r">ป่วย</th><th class="r">ตาย</th><th>เริ่มป่วย</th><th>รับแจ้ง</th><th>สถานะ</th></tr></thead><tbody>${ev.map(e => `<tr><td>${esc(e.disease_name)}</td><td>${esc(e.event_type)}</td><td>${esc(e.subdistrict)} ${esc(DIST.find(d => d.district_code === e.district_code)?.district_name || '')} ${esc(e.province)}</td><td class="r">${e.cases}</td><td class="r">${e.deaths}</td><td>${e.first_onset}</td><td>${e.received}</td><td>${esc(e.status)}</td></tr>`).join('')}</tbody></table>`
+    + issueList(iss) + `<p class="note">รวมกับเหตุการณ์เดิม ${old.length} รายการ (เหตุการณ์เดียวกันจะถูกแทนด้วยข้อมูลใหม่) • แก้สถานะเป็น "ปิดเหตุการณ์" ได้ในไฟล์ mebs_events.csv</p>`
+    + `<div class="dl">${link('mebs_events.csv', ['event_id', 'disease_id', 'disease_name', 'event_type', 'province', 'district_code', 'subdistrict', 'village', 'first_onset', 'last_onset', 'received', 'source', 'cases', 'deaths', 'status', 'action', 'note'], merged)}</div>`;
+};
+
+// ---------------- 4. DDC facility coverage ----------------
+const unitType = n => /รพ\.สต|ส่งเสริมสุขภาพตำบล|สถานีอนามัย/.test(n) ? 'รพ.สต.' : /เทศบาล|อบต|อบจ/.test(n) ? 'ศบส. อปท.' : /ศูนย์สุขภาพชุมชน|ศสม|ศสช|ศูนย์แพทย์ชุมชน/.test(n) ? 'ศสม./ศสช.' : /ศูนย์บริการสาธารณสุข/.test(n) ? 'ศูนย์บริการสาธารณสุข' : /^รพ\.|โรงพยาบาล/.test(n) ? 'โรงพยาบาล' : 'อื่นๆ';
+$('#fD').onchange = async e => {
+  const files = [...e.target.files]; if (!files.length) return; $('#outD').innerHTML = 'กำลังอ่าน…';
+  const iss = []; let list = null, types = null; const tagLabel = $('#typeD').value.trim();
+  for (const f of files) {
+    const [sh] = await readWorkbook(f);
+    const hi = sh.rows.findIndex(r => r.some(v => /^สถานพยาบาล$/.test(v)) && r.some(v => /ทันเวลา/.test(v)));
+    if (hi >= 0) {
+      const H = sh.rows[hi]; const ci = re => H.findIndex(v => re.test(v));
+      const cA = ci(/^อำเภอ/), cU = ci(/^สถานพยาบาล$/), cR = ci(/รายงานแล้ว/), cT = ci(/สถานพยาบาลทั้งหมด/), cTi = ci(/ทันเวลา.*\(n\)/), cN = ci(/รายงานทั้งหมด/);
+      let amp = ''; const out = [];
+      for (const r of sh.rows.slice(hi + 1)) {
+        if (r[cA]) amp = r[cA]; const m = /^(\d{5})\s*\((.*)\)\s*$/.exec(r[cU] || ''); if (!m) continue;
+        const dc = distCode(amp); if (!dc) iss.push(['orange', `${esc(f.name)}: อำเภอ "${esc(amp)}" ไม่ตรงกับ districts.csv`]);
+        out.push({ unit_code: m[1], unit_name: m[2].trim(), unit_type: unitType(m[2]), dds_type: '', district_code: dc, district_name: amp, reported: +r[cR] || 0, total: +r[cT] || 0, timely: +r[cTi] || 0, reports: +r[cN] || 0, period_label: $('#periodD').value });
+      }
+      out.filter(o => o.timely > o.reports).forEach(o => iss.push(['red', `${esc(o.unit_name)}: รายงานทันเวลา > รายงานทั้งหมด`]));
+      (list = list || []).push(out);
+      continue;
+    }
+    const ti = sh.rows.findIndex(r => r.some(v => /สถานพยาบาลทั้งหมด/.test(v)) && r.some(v => /รายงานแล้ว/.test(v)));
+    if (ti >= 0) {
+      const H = sh.rows[ti]; const cR = H.findIndex(v => /รายงานแล้ว/.test(v)), cT = H.findIndex(v => /สถานพยาบาลทั้งหมด/.test(v));
+      types = sh.rows.slice(ti + 1).filter(r => r[0] && r[cT] !== '').map(r => ({ dds_type: r[0].trim(), reported: +r[cR] || 0, total: +r[cT] || 0, period_label: $('#periodD').value }));
+      continue;
+    }
+    iss.push(['red', `${esc(f.name)}: ไม่รู้จักรูปแบบตาราง`]);
+  }
+  let html = '', dl = [];
+  // base list (replace) and/or tagged list (merge into existing/base by unit code)
+  // several facility tables: the largest is the full list; with a type label the smallest is the filtered one
+  if (list) { list.sort((a, b) => b.length - a.length); list = tagLabel ? { base: list.length > 1 ? list[0] : null, tagged: list[list.length - 1] } : { base: list[0] }; }
+  let fac = list?.base || null;
+  if (list?.tagged) {
+    const cur = fac || await getCSV('facility_dds.csv');
+    if (!cur.length) iss.push(['red', 'ยังไม่มี facility_dds.csv เดิม — อัปโหลดไฟล์ (ก) ที่ไม่กรองประเภทพร้อมกันด้วย']);
+    const codes = new Set(list.tagged.map(o => o.unit_code));
+    fac = cur.map(o => codes.has(o.unit_code) ? { ...o, dds_type: tagLabel } : o);
+    const miss = list.tagged.filter(o => !cur.some(c => c.unit_code === o.unit_code));
+    if (miss.length) iss.push(['orange', `${miss.length} หน่วยในไฟล์ที่กรองประเภท ไม่พบในรายชื่อหลัก`]);
+    html += `<p>ติดป้ายประเภท <b>${esc(tagLabel)}</b> ให้ ${fmt(codes.size - miss.length)} หน่วย</p>`;
+  }
+  if (fac) {
+    const n = k => fac.reduce((s, o) => s + +o[k], 0);
+    const noRep = fac.filter(o => +o.reported && !+o.reports).length;
+    if (noRep) iss.push(['yellow', `${noRep} แห่ง "รายงานแล้ว" แต่จำนวนรายงาน = 0 (ส่ง zero report หรือส่งโรคอื่นนอกตัวกรอง)`]);
+    html += `<section class="kpis"><div class="kpi"><div class="k-t">ความครอบคลุม</div><div class="k-v green">${fmt(n('reported') / n('total') * 100, 2)}%</div><div class="k-s">${fmt(n('reported'))} / ${fmt(n('total'))} แห่ง</div></div>
+    <div class="kpi"><div class="k-t">ความทันเวลา (7 วัน)</div><div class="k-v blue">${fmt(n('timely') / n('reports') * 100, 2)}%</div><div class="k-s">${fmt(n('timely'))} / ${fmt(n('reports'))} รายงาน</div></div></section>
+    <p class="muted">ตรวจตัวเลข 2 ช่องนี้ให้ตรงกับหน้า DDC Dashboard ก่อนอัปโหลด</p>`;
+    dl.push(link('facility_dds.csv', ['unit_code', 'unit_name', 'unit_type', 'dds_type', 'district_code', 'district_name', 'reported', 'total', 'timely', 'reports', 'period_label'], fac));
+    if (types) { const t = types.find(x => tagLabel && x.dds_type === tagLabel); const tagged = fac.filter(o => o.dds_type === tagLabel);
+      if (t && tagged.length) { const r = tagged.reduce((s, o) => s + +o.reported, 0); iss.push([r === t.reported && tagged.length === t.total ? 'green' : 'orange', `ตรวจไขว้ ${esc(tagLabel)}: รายหน่วย ${r}/${tagged.length} แห่ง เทียบตารางสรุปประเภท ${t.reported}/${t.total} แห่ง`]); } }
+  }
+  if (types) { html += `<h3>สรุปตามประเภทสถานพยาบาล</h3><table class="tbl"><thead><tr><th>ประเภท</th><th class="r">รายงานแล้ว</th><th class="r">ทั้งหมด</th><th class="r">ครอบคลุม</th></tr></thead><tbody>${types.map(t => `<tr><td>${esc(t.dds_type)}</td><td class="r">${t.reported}</td><td class="r">${t.total}</td><td class="r">${fmt(t.reported / t.total * 100, 1)}%</td></tr>`).join('')}</tbody></table>`;
+    const tr = types.reduce((s, t) => s + t.reported, 0), tt = types.reduce((s, t) => s + t.total, 0);
+    if (fac) { const n = k => fac.reduce((s, o) => s + +o[k], 0); iss.push([tr === n('reported') && tt === n('total') ? 'green' : 'orange', `ตรวจไขว้: ผลรวมตารางประเภท ${tr}/${tt} แห่ง เทียบรายสถานพยาบาล ${n('reported')}/${n('total')} แห่ง`]); }
+    dl.push(link('facility_types.csv', ['dds_type', 'reported', 'total', 'period_label'], types)); }
+  $('#outD').innerHTML = html + issueList(iss.filter(i => i[0] !== 'green')) + (iss.some(i => i[0] === 'green') ? `<ul class="issues">${iss.filter(i => i[0] === 'green').map(i => `<li><span class="chip green">ตรงกัน</span> ${i[1]}</li>`).join('')}</ul>` : '') + `<div class="dl">${dl.join('')}</div>`;
+};
+</script>
+</body>
+</html>

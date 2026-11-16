@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือผู้ดูแลแดชบอร์ด 10 โรค</title>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;600;700&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<style>main { margin-left: 0; max-width: 1150px; margin-inline: auto; }</style>
+</head>
+<body>
+<main id="main"><div class="loading">กำลังโหลด…</div></main>
+<script type="module">
+import { guideHTML } from '../js/guide.js';
+const config = await (await fetch('../data/config.json', { cache: 'no-cache' })).json();
+const names = ['summary_province.csv', 'weekly_2569.csv', 'weekly_2570.csv', 'dds_status.csv', 'unit_quality.csv', 'units.csv', 'mebs_events.csv', 'dds_district.csv', 'facility_dds.csv', 'facility_types.csv', 'contacts.csv', 'troubleshoot.csv', 'districts.csv', 'baseline_5y.csv'];
+const loaded = [];
+for (const n of names) { try { const r = await fetch('../data/' + n, { method: 'HEAD', cache: 'no-cache' }); if (r.ok) loaded.push({ file: n }); } catch { } }
+document.getElementById('main').innerHTML = guideHTML({ config, loaded }, '../').replace('href="../tools/', 'href="../tools/') + '<p class="note"><a href="../index.html">← กลับแดชบอร์ด</a></p>';
+</script>
+</body>
+</html>

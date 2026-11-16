@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แปลงไฟล์ DDS → ข้อมูลแดชบอร์ด</title>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;600;700&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  main { margin-left: 0; max-width: 1100px; margin-inline: auto; }
+  .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .row label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .row select, .row input { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: 500 14px var(--f-head); color: var(--ink); }
+  .req::after { content: ' *'; color: var(--red); }
+  .dl { display: flex; gap: 10px; flex-wrap: wrap; }
+  .privacy { background: #E2F6EF; border-radius: 12px; padding: 10px 14px; color: #0E5F45; font-size: 14px; }
+  pre { background: var(--bg); padding: 10px; border-radius: 10px; overflow-x: auto; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero"><div><div class="eyebrow">เครื่องมือสำหรับผู้ดูแลแดชบอร์ด</div><h1>รวม & แปลงไฟล์ DDS (506) → ข้อมูลแดชบอร์ด</h1><div class="sub">เลือกได้หลายไฟล์พร้อมกัน (.xlsx หรือ .csv) • ทำงานในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่มีการส่งไฟล์ออกไปที่ใด</div></div><a class="btn ghost" href="../index.html">← กลับแดชบอร์ด</a></header>
+  <p class="privacy">🔒 ผลลัพธ์เป็น <b>ข้อมูลรวมรายสัปดาห์ระดับตำบล</b> ไม่มีชื่อ เลขบัตร หรือ HN จึงอัปโหลดขึ้น GitHub ได้ — <b>ห้ามอัปโหลดไฟล์ DDS ต้นฉบับขึ้น GitHub</b></p>
+
+  <div class="card"><div class="card-h"><h2>1. เลือกไฟล์ (เลือกทุกไฟล์ที่ export มาพร้อมกัน)</h2></div>
+    <div class="row">
+      <label>ไฟล์จาก DDS (.xlsx หรือ .csv) — กด Ctrl/Shift เลือกหลายไฟล์<input type="file" id="file" accept=".xlsx,.csv,.txt" multiple></label>
+      <label>การเข้ารหัส (เฉพาะไฟล์ CSV)<select id="enc"><option value="utf-8">UTF-8 (ค่าเริ่มต้น)</option><option value="windows-874">Windows-874 / TIS-620 (ถ้าภาษาไทยเพี้ยน)</option></select></label>
+    </div>
+    <div id="finfo" class="note"></div>
+  </div>
+
+  <div class="card" id="mapCard" hidden><div class="card-h"><h2>2. จับคู่คอลัมน์ & เงื่อนไข</h2><span class="muted">ระบบเดาให้แล้ว ตรวจและแก้ได้ — จำค่าไว้ใช้สัปดาห์หน้า</span></div>
+    <div class="row" id="maps"></div>
+    <div class="row" style="margin-top:12px">
+      <label>นับเฉพาะสถานะรายงาน (คั่นด้วย ,)<input id="okStatus" value="อนุมัติแล้ว"></label>
+      <label>นับเฉพาะจังหวัดขณะป่วย (รหัส)<input id="prov" value="34"></label>
+      <label>ค่าที่หมายถึง "เสียชีวิต" (คั่นด้วย ,)<input id="deadVals" value="เสียชีวิต,ตาย,dead,died"></label>
+    </div>
+    <div style="margin-top:14px"><button class="btn" id="run">ตรวจสอบ รวม และแปลงข้อมูล</button> <span id="busy" class="muted"></span></div>
+  </div>
+
+  <div class="card" id="resCard" hidden><div class="card-h"><h2>3. ผลการตรวจสอบ</h2></div>
+    <div id="report"></div>
+    <h3>ดาวน์โหลด (นำไปวางทับในโฟลเดอร์ data/ บน GitHub)</h3>
+    <div class="dl" id="dls"></div>
+    <p class="note">ถ้ามีไฟล์ปีงบใหม่ เพิ่มชื่อไฟล์ใน <code>weekly_files</code> ของ data/config.json ด้วย • units.csv: เติมคอลัมน์ affiliation (ในสังกัด สธ. / ถ่ายโอน อบจ.) และตรวจ district_code ที่ระบบเดาจากที่อยู่ผู้ป่วยส่วนใหญ่</p>
+  </div>
+</main>
+<script type="module">
+import { parseCSV, toCSV, epiWeek, ymd, currentFiscalBE, fmt } from '../js/data.js';
+import { readXlsx } from '../js/xlsx-lite.js';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const DAY = 86400000;
+let CFG, DIST, FILES = [];
+const FIELDS = [
+  ['disease', 'โรค (รหัสกลุ่มโรค 506 หรือชื่อโรค)', true, [/^รหัสกลุ่มโรค$/, /รหัสโรค|506/, /^disease|^โรค/i]],
+  ['onset', 'วันเริ่มป่วย / เริ่มมีอาการ', true, [/เริ่มมีอาการ/, /เริ่มป่วย|onset|datesick/i]],
+  ['province', 'จังหวัดขณะป่วย', false, [/จังหวัดขณะป่วย/, /^จังหวัด|^prov/i]],
+  ['district', 'อำเภอขณะป่วย (รหัสหรือชื่อ)', true, [/อำเภอขณะป่วย/, /อำเภอ|amphur|ampur|district/i]],
+  ['subdistrict', 'ตำบลขณะป่วย', false, [/ตำบลขณะป่วย/, /ตำบล|tambon/i]],
+  ['age', 'อายุ (ปี)', false, [/^อายุปี$/, /อายุ|^age/i]],
+  ['sex', 'เพศ', false, [/^เพศ$/, /^sex/i]],
+  ['result', 'สภาพผู้ป่วย / ผลการรักษา', false, [/^สภาพผู้ป่วย$/, /สภาพ|ผล.*รักษา|result/i]],
+  ['status', 'สถานะรายงาน (อนุมัติ/ยกเลิก)', false, [/^สถานะ$/, /status/i]],
+  ['report', 'วันที่ส่งรายงาน', false, [/ส่งรายงาน/, /รับรายงาน|วันที่รายงาน|report/i]],
+  ['unit', 'รหัสหน่วยงานที่รายงาน', false, [/^รหัสหน่วยงาน$/, /hospcode|hcode|รหัส.*(หน่วย|สถาน)/i]],
+  ['unitName', 'ชื่อหน่วยงานที่รายงาน', false, [/^หน่วยงาน$/, /ชื่อหน่วย|hospname/i]],
+  ['cid', 'เลขบัตร (ใช้ตรวจรายงานซ้ำเท่านั้น ไม่ถูกบันทึก)', false, [/^cid$/i, /เลขบัตร|^pid$/i]],
+];
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } } };
+
+CFG = await (await fetch('../data/config.json')).json();
+DIST = parseCSV(await (await fetch('../data/districts.csv')).text()).records;
+
+$('#file').onchange = $('#enc').onchange = load;
+async function load() {
+  const list = [...$('#file').files]; if (!list.length) return;
+  FILES = [];
+  $('#finfo').innerHTML = 'กำลังอ่านไฟล์…';
+  for (const [i, f] of list.entries()) {
+    $('#finfo').textContent = `กำลังอ่าน ${i + 1}/${list.length}: ${f.name}`;
+    try {
+      const p = /\.xlsx$/i.test(f.name) ? await readXlsx(f) : parseCSV(new TextDecoder($('#enc').value).decode(await f.arrayBuffer()));
+      FILES.push({ name: f.name, ...p });
+    } catch (e) { FILES.push({ name: f.name, header: [], records: [], error: e.message }); }
+  }
+  const h0 = FILES.find(f => f.header.length)?.header || [];
+  const diffHdr = FILES.filter(f => f.header.length && f.header.join('|') !== h0.join('|'));
+  $('#finfo').innerHTML = `<table class="tbl"><thead><tr><th>ไฟล์</th><th class="r">แถว</th><th>หมายเหตุ</th></tr></thead><tbody>${FILES.map(f => `<tr><td>${esc(f.name)}</td><td class="r">${fmt(f.records.length)}</td><td>${f.error ? `<span class="chip red">${esc(f.error)}</span>` : f.records.length === 10000 ? '<span class="chip yellow">10,000 แถวพอดี — DDS แบ่งไฟล์ละ 10,000 แถว ตรวจว่าได้ไฟล์ลำดับถัดไปครบ</span>' : ''}${diffHdr.includes(f) ? ' <span class="chip red">หัวคอลัมน์ต่างจากไฟล์แรก</span>' : ''}</td></tr>`).join('')}</tbody><tfoot><tr><td>รวม ${FILES.length} ไฟล์</td><td class="r">${fmt(FILES.reduce((s, f) => s + f.records.length, 0))}</td><td></td></tr></tfoot></table>`;
+  const saved = store.get('ddsMap2') || {};
+  $('#maps').innerHTML = FIELDS.map(([k, label, req, res]) => {
+    let guess = h0.includes(saved[k]) ? saved[k] : '';
+    if (!guess) for (const re of res) { guess = h0.find(h => re.test(h)); if (guess) break; }
+    return `<label class="${req ? 'req' : ''}">${label}<select data-k="${k}"><option value="">— ไม่มี —</option>${h0.map(h => `<option ${h === guess ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select></label>`;
+  }).join('');
+  for (const id of ['okStatus', 'prov', 'deadVals']) if (saved[id] != null) $('#' + id).value = saved[id];
+  $('#mapCard').hidden = false; $('#resCard').hidden = true;
+}
+
+function parseDate(s) {
+  s = (s || '').trim(); if (!s) return NaN; let m;
+  if (/^\d{5}(\.\d+)?$/.test(s)) { const n = +s; if (n > 20000 && n < 80000) return Date.UTC(1899, 11, 30) + Math.floor(n) * DAY; }
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) return mk(+m[1], +m[2], +m[3]);
+  if ((m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(s))) { let y = +m[3]; if (y < 100) y += y > 50 ? 2400 : 2500; return mk(y, +m[2], +m[1]); }
+  return NaN;
+  function mk(y, mo, d) { if (y > 2400) y -= 543; if (mo < 1 || mo > 12 || d < 1 || d > 31) return NaN; const t = Date.UTC(y, mo - 1, d); return new Date(t).getUTCDate() === d ? t : NaN; }
+}
+const clean = s => String(s || '').replace(/^(อำเภอ|อ\.|ตำบล|ต\.)\s*/, '').replace(/\s+/g, '').toLowerCase();
+const pad2 = s => String(s).padStart(2, '0');
+function matchDisease(v) {
+  const s = String(v || '').trim(); if (!s) return null;
+  const num = s.replace(/^0+/, '');
+  for (const d of CFG.diseases) if (d.codes506.some(c => c.replace(/^0+/, '') === num)) return d.id;
+  if (/^\d+$/.test(s)) return null;
+  const l = s.toLowerCase();
+  for (const d of CFG.diseases) if (d.keywords.some(k => l.includes(k.toLowerCase()))) return d.id;
+  return null;
+}
+function matchDistrict(v, prov) {
+  const s = String(v || '').trim(); if (!s) return null;
+  if (/^\d{1,2}$/.test(s) && prov) { const c = pad2(prov) + pad2(s); return DIST.some(d => d.district_code === c) ? c : null; }
+  const digits = s.replace(/\D/g, '');
+  if (digits.length >= 4) { const c = digits.slice(0, 4); if (DIST.some(d => d.district_code === c)) return c; }
+  const n = clean(s); const d = DIST.find(x => clean(x.district_name) === n); return d ? d.district_code : null;
+}
+const ageGroup = a => { a = parseFloat(a); if (!isFinite(a)) return ''; return a < 5 ? '0-4' : a < 15 ? '5-14' : a < 25 ? '15-24' : a < 35 ? '25-34' : a < 45 ? '35-44' : a < 55 ? '45-54' : a < 65 ? '55-64' : '65+'; };
+const sexOf = s => /^(1|ช|ชาย|m|male)/i.test(String(s).trim()) ? 'ชาย' : /^(2|ญ|หญิง|f|female)/i.test(String(s).trim()) ? 'หญิง' : '';
+const unitType = n => /ส่งเสริมสุขภาพตำบล|รพ\.สต|สถานีอนามัย|ศูนย์สุขภาพชุมชน/.test(n) ? 'รพ.สต.' : /เทศบาล|อบต|อบจ|องค์การบริหาร/.test(n) ? 'อปท.' : /โรงพยาบาล/.test(n) ? 'รพ.' : 'อื่นๆ';
+
+$('#run').onclick = async () => {
+  const map = {}; document.querySelectorAll('[data-k]').forEach(s => map[s.dataset.k] = s.value);
+  const missing = FIELDS.filter(f => f[2] && !map[f[0]]).map(f => f[1]);
+  if (missing.length) { $('#busy').textContent = 'ต้องเลือกคอลัมน์: ' + missing.join(', '); return; }
+  $('#busy').textContent = 'กำลังประมวลผล…'; await new Promise(r => setTimeout(r, 30));
+  const list = v => v.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const deadSet = list($('#deadVals').value), okSet = list($('#okStatus').value), provF = $('#prov').value.trim();
+  store.set('ddsMap2', { ...map, okStatus: $('#okStatus').value, prov: provF, deadVals: $('#deadVals').value });
+
+  // 1) merge files, drop rows that are identical across files (overlapping exports)
+  const seen = new Set(); let overlap = 0; const all = [];
+  const fstat = FILES.map(f => ({ name: f.name, n: f.records.length, minO: Infinity, maxO: -Infinity, minR: Infinity, maxR: -Infinity }));
+  FILES.forEach((f, fi) => { for (const r of f.records) {
+    const sig = f.header.map(h => r[h]).join('\u0001'); if (seen.has(sig)) { overlap++; continue; } seen.add(sig);
+    const o = parseDate(r[map.onset]), rp = map.report ? parseDate(r[map.report]) : NaN, st = fstat[fi];
+    if (isFinite(o)) { st.minO = Math.min(st.minO, o); st.maxO = Math.max(st.maxO, o); } if (isFinite(rp)) { st.minR = Math.min(st.minR, rp); st.maxR = Math.max(st.maxR, rp); }
+    all.push(r);
+  } });
+  seen.clear();
+
+  const agg = new Map(), uq = new Map(), units = new Map();
+  const ex = { status: new Map(), prov: 0, disease: new Map(), date: 0, district: new Map() };
+  const dupKeys = new Map(); let ok = 0, deaths = 0, minT = Infinity, maxT = -Infinity;
+  const per = {}; CFG.diseases.forEach(d => per[d.id] = { c: 0, x: 0 });
+  const inc = (m, k) => m.set(k, (m.get(k) || 0) + 1);
+  for (const r of all) {
+    if (map.status && okSet.length) { const sv = String(r[map.status] || '').toLowerCase(); if (!okSet.includes(sv)) { inc(ex.status, r[map.status] || '(ว่าง)'); continue; } }
+    const prov = map.province ? String(r[map.province] || '').trim() : provF;
+    if (map.province && provF && prov !== provF) { ex.prov++; continue; }
+    const d = matchDisease(r[map.disease]); if (!d) { inc(ex.disease, r[map.disease] || '(ว่าง)'); continue; }
+    const t = parseDate(r[map.onset]);
+    const dc = matchDistrict(r[map.district], prov || provF);
+    const fy = isFinite(t) ? currentFiscalBE(t) : null;
+    if (map.unit && r[map.unit]) {
+      const u = r[map.unit].trim(); const rep = map.report ? parseDate(r[map.report]) : NaN; const ufy = fy || (isFinite(rep) ? currentFiscalBE(rep) : null);
+      if (ufy) { const k = u + '|' + ufy; const q = uq.get(k) || { unit_code: u, fiscal_year_be: ufy, reports: 0, timely: 0, complete: 0 };
+        q.reports++; if (isFinite(t) && isFinite(rep) && rep >= t && (rep - t) / DAY <= CFG.unit_quality.timely_days) q.timely++;
+        if (isFinite(t) && dc && (!map.subdistrict || r[map.subdistrict])) q.complete++; uq.set(k, q); }
+      const un = units.get(u) || { unit_code: u, unit_name: map.unitName ? r[map.unitName] : '', dist: new Map() }; if (dc) inc(un.dist, dc); units.set(u, un);
+    }
+    if (!isFinite(t)) { ex.date++; continue; }
+    if (!dc) { inc(ex.district, r[map.district] || '(ว่าง)'); continue; }
+    const dead = map.result ? deadSet.some(v => String(r[map.result]).toLowerCase().includes(v)) : false;
+    if (map.cid && r[map.cid] && !/^0+$/.test(r[map.cid])) inc(dupKeys, r[map.cid] + '|' + d + '|' + t);
+    const ws = ymd(epiWeek(t).start);
+    let sd = map.subdistrict ? String(r[map.subdistrict] || '').replace(/^(ตำบล|ต\.)\s*/, '').trim() : '';
+    if (/^\d{1,2}$/.test(sd)) sd = dc + pad2(sd);
+    const row = { week_start: ws, disease_id: d, district_code: dc, subdistrict: sd, age_group: map.age ? ageGroup(r[map.age]) : '', sex: map.sex ? sexOf(r[map.sex]) : '', fiscal_year_be: fy, year_be: new Date(t).getUTCFullYear() + 543 };
+    const key = Object.values(row).join('|'); const a = agg.get(key) || { ...row, cases: 0, deaths: 0 };
+    a.cases++; per[d].c++; if (dead) { a.deaths++; deaths++; per[d].x++; } agg.set(key, a); ok++; minT = Math.min(minT, t); maxT = Math.max(maxT, t);
+  }
+  // status counts among reports from this province (for DDS KPI step 2: pending < 1%)
+  const stCount = { approved: 0, pending: 0, cancelled: 0 };
+  if (map.status) for (const r of all) { const v = String(r[map.status] || ''); if (/อนุมัติ/.test(v)) stCount.approved++; else if (/รอแก้ไข|รอ/.test(v)) stCount.pending++; else if (/ยกเลิก|ซ้ำ/.test(v)) stCount.cancelled++; }
+  let dupN = 0; for (const v of dupKeys.values()) if (v > 1) dupN += v - 1; dupKeys.clear();
+  const top = m => [...m].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${esc(k)} (${fmt(v)})`).join(', ');
+  const rng = (a, b) => isFinite(a) ? `${ymd(a)} – ${ymd(b)}` : '–';
+  $('#report').innerHTML = `
+  <section class="kpis"><div class="kpi"><div class="k-t">ผู้ป่วยที่นำเข้าแดชบอร์ด</div><div class="k-v green">${fmt(ok)}</div><div class="k-s">จาก ${fmt(FILES.reduce((s, f) => s + f.records.length, 0))} แถวในทุกไฟล์</div></div>
+  <div class="kpi"><div class="k-t">ผู้เสียชีวิต</div><div class="k-v red">${fmt(deaths)}</div><div class="k-s">${map.result ? 'จากคอลัมน์ ' + esc(map.result) : 'ไม่ได้เลือกคอลัมน์สภาพผู้ป่วย'}</div></div>
+  <div class="kpi"><div class="k-t">ช่วงวันเริ่มป่วย</div><div class="k-v navy sm">${rng(minT, maxT)}</div><div class="k-s">ตรวจว่าตรงกับช่วงที่ export</div></div></section>
+  <h3>ขั้นตอนการคัดกรอง</h3>
+  <table class="tbl"><tbody>
+   <tr><td>แถวทั้งหมดในทุกไฟล์</td><td class="r b">${fmt(FILES.reduce((s, f) => s + f.records.length, 0))}</td></tr>
+   <tr><td>− แถวซ้ำกันทุกช่องระหว่างไฟล์ (ช่วง export ทับกัน)</td><td class="r">${fmt(overlap)}</td></tr>
+   <tr><td>− สถานะรายงานไม่ใช่ "${esc($('#okStatus').value)}": ${top(ex.status) || '–'}</td><td class="r">${fmt([...ex.status.values()].reduce((a, b) => a + b, 0))}</td></tr>
+   <tr><td>− ป่วยนอกจังหวัด (จังหวัดขณะป่วย ≠ ${esc(provF)})</td><td class="r">${fmt(ex.prov)}</td></tr>
+   <tr><td>− ไม่อยู่ใน 10 โรค: ${top(ex.disease) || '–'}</td><td class="r">${fmt([...ex.disease.values()].reduce((a, b) => a + b, 0))}</td></tr>
+   <tr><td>− วันเริ่มป่วยอ่านไม่ได้</td><td class="r">${fmt(ex.date)}</td></tr>
+   <tr><td>− อำเภอไม่ตรงกับ districts.csv: ${top(ex.district) || '–'}</td><td class="r">${fmt([...ex.district.values()].reduce((a, b) => a + b, 0))}</td></tr>
+   <tr><td class="b">= นำเข้าแดชบอร์ด</td><td class="r b">${fmt(ok)}</td></tr>
+  </tbody></table>
+  ${map.cid ? `<p class="note">ข้อสังเกต: พบรายงานที่ เลขบัตร + โรค + วันเริ่มป่วย ซ้ำกัน ${fmt(dupN)} รายการ (ยังนับรวมตาม DDS — ควรให้หน่วยงานตรวจและกดยกเลิก/ซ้ำใน DDS)</p>` : ''}
+  <h3>ยอดรายโรค</h3>
+  <table class="tbl"><thead><tr><th>โรค</th><th class="r">ผู้ป่วย</th><th class="r">เสียชีวิต</th></tr></thead><tbody>${CFG.diseases.map(d => `<tr><td>${esc(d.name)}</td><td class="r">${fmt(per[d.id].c)}</td><td class="r">${fmt(per[d.id].x)}</td></tr>`).join('')}</tbody></table>
+  <h3>ช่วงข้อมูลของแต่ละไฟล์</h3>
+  <table class="tbl"><thead><tr><th>ไฟล์</th><th class="r">แถว</th><th>วันเริ่มป่วย</th><th>วันที่ส่งรายงาน</th></tr></thead><tbody>${fstat.map(f => `<tr><td>${esc(f.name)}</td><td class="r">${fmt(f.n)}</td><td>${rng(f.minO, f.maxO)}</td><td>${rng(f.minR, f.maxR)}</td></tr>`).join('')}</tbody></table>
+  <p class="note">ตรวจยอดรายโรคเทียบกับหน้ารายงาน DDS ก่อนอัปโหลดทุกครั้ง</p>`;
+  const header = ['week_start', 'disease_id', 'district_code', 'subdistrict', 'age_group', 'sex', 'fiscal_year_be', 'year_be', 'cases', 'deaths'];
+  const byFy = {}; for (const a of agg.values()) (byFy[a.fiscal_year_be] = byFy[a.fiscal_year_be] || []).push(a);
+  const link = (name, csv) => { const b = new Blob(['\uFEFF' + csv], { type: 'text/csv' }); return `<a class="btn" download="${name}" href="${URL.createObjectURL(b)}">⬇ ${name}</a>`; };
+  const unitRows = [...units.values()].map(u => ({ unit_code: u.unit_code, unit_name: u.unit_name, unit_type: unitType(u.unit_name), affiliation: '', district_code: [...u.dist].sort((a, b) => b[1] - a[1])[0]?.[0] || '', contact_name: '', phone: '' })).sort((a, b) => a.district_code.localeCompare(b.district_code) || a.unit_code.localeCompare(b.unit_code));
+  $('#dls').innerHTML = Object.keys(byFy).sort().map(fy => link(`weekly_${fy}.csv`, toCSV(header, byFy[fy].sort((a, b) => a.week_start.localeCompare(b.week_start) || a.disease_id.localeCompare(b.disease_id) || a.district_code.localeCompare(b.district_code) || a.subdistrict.localeCompare(b.subdistrict))))).join('')
+    + (uq.size ? link('unit_quality.csv', toCSV(['unit_code', 'fiscal_year_be', 'reports', 'timely', 'complete'], [...uq.values()])) : '')
+    + (map.status ? link('dds_status.csv', toCSV(['period_label', 'date_from', 'date_to', 'approved', 'pending', 'cancelled'], [{ period_label: `วันเริ่มป่วย ${rng(minT, maxT)}`, date_from: isFinite(minT) ? ymd(minT) : '', date_to: isFinite(maxT) ? ymd(maxT) : '', ...stCount }])) : '')
+    + (units.size ? link('units.csv', toCSV(['unit_code', 'unit_name', 'unit_type', 'affiliation', 'district_code', 'contact_name', 'phone'], unitRows)) : '');
+  $('#busy').textContent = ''; $('#resCard').hidden = false; $('#resCard').scrollIntoView({ behavior: 'smooth' });
+};
+</script>
+</body>
+</html>
