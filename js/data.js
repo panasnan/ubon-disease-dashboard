@@ -35,13 +35,16 @@ export const ymd = d => new Date(d).toISOString().slice(0, 10);
 export function parseISO(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : NaN; }
 export function sundayOf(t) { const d = new Date(t).getUTCDay(); return t - d * DAY; }
 
-// MMWR / Thai epi week: Sunday–Saturday, week 1 contains 4 January
-export function epiWeek(t) {
+// Thai epidemiological week (กองระบาดวิทยา): weeks run Sunday–Saturday, week 1 starts on 1 January
+// and ends on the first Saturday; the last week is cut at 31 December (e.g. 2569: W1 = 1–3 ม.ค., W53 = 27–31 ธ.ค.).
+// A Sunday week that spans New Year therefore belongs to both years: pass the reporting year (ค.ศ.) to choose.
+export const EPI = { year: null }; // reporting-year context set by the dashboard (ค.ศ.)
+export function epiWeek(t, yearCE = EPI.year) {
   const s = sundayOf(t);
-  const wed = s + 3 * DAY; // the year that owns the week = year of its Wednesday
-  const y = new Date(wed).getUTCFullYear();
-  const w1 = sundayOf(Date.UTC(y, 0, 4));
-  return { year: y, week: Math.floor((s - w1) / (7 * DAY)) + 1, start: s };
+  let y = yearCE ?? new Date(t).getUTCFullYear();
+  const w1 = y => sundayOf(Date.UTC(y, 0, 1));
+  if (s < w1(y) || s > Date.UTC(y, 11, 31)) y = new Date(s + (s < w1(y) ? 6 : 0) * DAY).getUTCFullYear(); // outside the context year
+  return { year: y, week: Math.floor((s - w1(y)) / (7 * DAY)) + 1, start: s, from: Math.max(s, Date.UTC(y, 0, 1)), to: Math.min(s + 6 * DAY, Date.UTC(y, 11, 31)) };
 }
 
 const TH_MONTH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -90,7 +93,7 @@ export async function loadAll() {
     try { const p = parseCSV(await getText('data/' + name)); out.loaded.push({ file: name, rows: p.records.length }); return p.records; }
     catch (e) { if (required) issues.push({ level: 'red', msg: `โหลด${friendly(name)}ไม่ได้ (${e.message})` }); else out.loaded.push({ file: name, rows: 0, missing: true }); return []; }
   };
-  out.districts = (await csv('districts.csv', true)).map(r => ({ code: r.district_code, name: r.district_name, pop: +r.population || 0, gx: +r.grid_x, gy: +r.grid_y }));
+  out.districts = (await csv('districts.csv', true)).map(r => ({ code: r.district_code, name: r.district_name, pop: +r.population || 0, zone: r.zone || '', gx: +r.grid_x, gy: +r.grid_y }));
   out.summary = await csv('summary_province.csv');
   out.baselineRows = await csv('baseline_5y.csv');
   out.units = await csv('units.csv');
@@ -226,7 +229,7 @@ export function baselineFor(db, disease, district, ew, endYear) {
 function buildHist(rows) {
   const h = new Map();
   for (const r of rows) {
-    const e = epiWeek(r.t);
+    const e = epiWeek(r.t, r.cy ? r.cy - 543 : null);
     h.set(`yr|${e.year}`, 1);
     for (const dc of [r.dc, 'ALL']) { const k = `${r.d}|${dc}|${e.year}|${e.week}`; h.set(k, (h.get(k) || 0) + r.c); }
   }
@@ -250,7 +253,7 @@ export function alertLevel(db, disease, district, asOf) {
   const dz = db.config.diseases.find(d => d.id === disease);
   let level = 'green', ratio = null;
   if (!baseOk) level = recent ? 'nobase' : 'green';
-  else { ratio = base ? recent / base : (recent ? Infinity : 0); level = ratio > A.ratio_red ? 'red' : ratio > A.ratio_orange ? 'orange' : ratio > A.ratio_yellow ? 'yellow' : 'green'; }
+  else { ratio = recent / Math.max(base, 1); /* baseline < 1: compare with 1 to avoid ∞ */ level = ratio > A.ratio_red ? 'red' : ratio > A.ratio_orange ? 'orange' : ratio > A.ratio_yellow ? 'yellow' : 'green'; }
   const bump = l => { if (LEVELS[l] > LEVELS[level] || level === 'nobase') level = l; };
   if (deaths && A.death_min_level) bump(A.death_min_level);
   if (dz?.any_case_red && recent) bump('red');

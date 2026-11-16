@@ -25,7 +25,8 @@ function kpiList(m) {
   return [
     { t: 'ผู้ป่วยสะสม 10 โรค', v: fmt(m.cases), s: 'ราย', col: '#174EA6' },
     { t: 'ผู้เสียชีวิต', v: fmt(m.deaths), s: m.deaths ? `ราย • CFR ${fmt(m.cases ? m.deaths / m.cases * 100 : 0, 2)}%` : 'ราย', col: m.deaths ? '#E5484D' : '#16A477' },
-    m.weekDelta != null ? { t: 'ผู้ป่วยรายใหม่สัปดาห์นี้', v: `+${fmt(m.weekDelta)}`, s: 'ราย (เทียบรายงานสัปดาห์ก่อน)', col: '#D08612' }
+    m.prev && !m.prev.samePeriod ? { t: m.prev.label, v: fmt(m.prev.rows.reduce((a, r) => a + (r?.cases || 0), 0)), s: `ราย • ตาย ${fmt(m.prev.rows.reduce((a, r) => a + (r?.deaths || 0), 0))}`, col: '#5B6B86' }
+    : m.weekDelta != null ? { t: 'ผู้ป่วยรายใหม่สัปดาห์นี้', v: `+${fmt(m.weekDelta)}`, s: 'ราย (เทียบรายงานสัปดาห์ก่อน)', col: '#D08612' }
       : m.change == null ? { t: 'เทียบช่วงเดียวกันปีก่อน', v: '–', s: m.changeNote || 'ไม่มีข้อมูลเปรียบเทียบ', col: '#5B6B86' }
         : { t: 'เทียบช่วงเดียวกันปีก่อน', v: `${m.change > 0 ? '▲' : m.change < 0 ? '▼' : ''} ${fmt(Math.abs(m.change), 1)}%`, s: m.change > 0 ? 'เพิ่มขึ้น' : m.change < 0 ? 'ลดลง' : 'เท่าเดิม', col: m.change > 0 ? '#E5484D' : '#16A477' }
   ];
@@ -65,6 +66,7 @@ async function drawLandscape(canvas, m) {
 
   // right: table
   const rx = 740, rw = 1120, ty = 222, th = 768; card(c, rx, ty, rw, th);
+  if (m.prev) return drawCompareTable(c, m, rx, ty, rw, th), footer(c, m, W, H), canvas;
   const rows = m.rows, rh = (th - 84) / rows.length;
   const X = { name: rx + 36, bar: rx + 340, cases: rx + 640, deaths: rx + 740, rate: rx + 880, cfr: rx + 975, st: rx + rw - 76 };
   c.font = F('700', 22); c.fillStyle = '#5B6B86';
@@ -82,11 +84,43 @@ async function drawLandscape(canvas, m) {
     c.fillStyle = r.level === 'yellow' ? '#10234A' : '#fff'; c.textAlign = 'center'; c.font = F('700', 20); c.fillText(LEVEL_TEXT[r.level] || '–', X.st, y + rh / 2 + 7);
   });
   c.textAlign = 'left';
-  // footer
+  footer(c, m, W, H);
+  return canvas;
+}
+function footer(c, m, W, H) {
   c.fillStyle = '#10234A'; c.fillRect(0, H - 70, W, 70);
   c.fillStyle = '#fff'; c.font = F('600', 21); c.fillText(m.source, 60, H - 28);
   c.textAlign = 'right'; c.fillStyle = '#9CC0FF'; c.font = F('400', 20, 'Sarabun'); c.fillText(m.asOfText + (m.url ? `  •  ${m.url}` : ''), W - 60, H - 28); c.textAlign = 'left';
-  return canvas;
+}
+// comparison table like the weekly PowerPoint report: previous year | current year
+function drawCompareTable(c, m, rx, ty, rw, th) {
+  const rows = m.rows, P = m.prev, hh = 112, rh = (th - hh - (P.samePeriod ? 12 : 34)) / rows.length;
+  const X = { name: rx + 30, pc: rx + 455, pd: rx + 530, pf: rx + 625, cc: rx + 780, cd: rx + 855, cr: rx + 985, cf: rx + 1080 };
+  const g1 = [rx + 330, rx + 640], g2 = [rx + 650, rx + rw - 12];
+  // group headers
+  c.fillStyle = '#E3E9F3'; rr(c, g1[0], ty + 14, g1[1] - g1[0], 44, 10); c.fill();
+  c.fillStyle = '#174EA6'; rr(c, g2[0], ty + 14, g2[1] - g2[0], 44, 10); c.fill();
+  c.textAlign = 'center'; c.font = F('700', 20);
+  c.fillStyle = '#10234A'; c.fillText(P.label.replace(/\s+/g, ' '), (g1[0] + g1[1]) / 2, ty + 43);
+  c.fillStyle = '#fff'; c.fillText(m.curLabel, (g2[0] + g2[1]) / 2, ty + 43);
+  c.font = F('700', 18); c.fillStyle = '#5B6B86';
+  [['ป่วย (ราย)', X.pc], ['ตาย', X.pd], ['CFR %', X.pf], ['ป่วย (ราย)', X.cc], ['ตาย', X.cd], ['ต่อแสน ปชก.', X.cr], ['CFR %', X.cf]].forEach(([t, x]) => { c.textAlign = 'right'; c.fillText(t, x, ty + 92); });
+  c.textAlign = 'left'; c.fillText('โรค / ภัยสุขภาพ', X.name, ty + 92);
+  rows.forEach((r, i) => {
+    const y = ty + hh + i * rh, mid = y + rh / 2 + 9, p = P.rows[i];
+    if (i % 2 === 0) { c.fillStyle = '#F6F9FE'; c.fillRect(rx + 10, y, rw - 20, rh); }
+    c.fillStyle = 'rgba(227,233,243,.55)'; c.fillRect(g1[0], y, g1[1] - g1[0], rh);
+    const lv = LEVEL_COLOR[r.level]; if (lv && r.level !== 'nobase' && r.level !== 'none') { c.fillStyle = lv; rr(c, rx + 12, y + 8, 6, rh - 16, 3); c.fill(); }
+    c.textAlign = 'left'; c.fillStyle = '#10234A'; c.font = F('600', 26); c.fillText(`${i + 1}. ${r.name}`, X.name, mid);
+    c.textAlign = 'right'; c.font = F('400', 24, 'Sarabun'); c.fillStyle = '#5B6B86';
+    c.fillText(p ? fmt(p.cases) : '–', X.pc, mid); c.fillText(p ? (p.deaths ? fmt(p.deaths) : '-') : '–', X.pd, mid); c.fillText(p ? fmt(p.cfr, 2) : '–', X.pf, mid);
+    c.font = F('700', 27); c.fillStyle = '#10234A'; c.fillText(fmt(r.cases), X.cc, mid);
+    c.fillStyle = r.deaths ? '#E5484D' : '#10234A'; c.fillText(fmt(r.deaths), X.cd, mid);
+    c.font = F('400', 24, 'Sarabun'); c.fillStyle = '#10234A'; c.fillText(r.rate == null ? '–' : fmt(r.rate, 2), X.cr, mid);
+    c.fillStyle = r.cfr >= 1 ? '#E5484D' : '#10234A'; c.fillText(fmt(r.cfr, 2), X.cf, mid);
+  });
+  c.textAlign = 'left';
+  if (!P.samePeriod) { c.fillStyle = '#5B6B86'; c.font = F('400', 17, 'Sarabun'); c.fillText(`* ${P.label} เป็นข้อมูลทั้งปี ช่วงเวลาไม่เท่ากับปีปัจจุบัน จึงไม่คำนวณร้อยละเปลี่ยนแปลง`, rx + 30, ty + th - 12); }
 }
 
 export async function drawInfographic(canvas, m, sizeKey = 'ppt') {

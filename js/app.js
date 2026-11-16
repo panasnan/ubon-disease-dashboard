@@ -1,4 +1,4 @@
-import { loadAll, prepare, yearOf, parseISO, friendly, buildIndex, makeDemo, periodRange, currentFiscalBE, epiWeek, sundayOf, thDate, ymd, fmt, rate, cfr, pctChange, cell, alertLevel, baselineFor, detectClusters, LEVELS } from './data.js';
+import { EPI, loadAll, prepare, yearOf, parseISO, friendly, buildIndex, makeDemo, periodRange, currentFiscalBE, epiWeek, sundayOf, thDate, ymd, fmt, rate, cfr, pctChange, cell, alertLevel, baselineFor, detectClusters, LEVELS } from './data.js';
 import { hbars, sparkline, epiCurve, heatmap, COLORS, LEVEL_COLOR, LEVEL_TEXT } from './charts.js';
 import { renderMap } from './map.js';
 import { drawInfographic, SIZES } from './infographic.js';
@@ -28,13 +28,14 @@ const PAGES = [
 ];
 
 let DB, REAL_ROWS;
-const S = { page: 'overview', yt: 'fiscal', y: currentFiscalBE(Date.now()), wk: '', dc: 'ALL', fac: '', d: 'ALL', demo: false, size: 'ppt', src: '' };
+const S = { page: 'overview', yt: 'calendar', y: new Date().getFullYear() + 543, wk: '', dc: 'ALL', fac: '', d: 'ALL', demo: false, size: 'ppt', src: '' };
 
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
-  for (const k of ['page', 'yt', 'dc', 'd', 'size', 'src', 'wk', 'fac']) if (p.get(k)) S[k] = p.get(k);
+  for (const k of ['page', 'dc', 'd', 'size', 'src', 'wk', 'fac']) if (p.get(k)) S[k] = p.get(k);
+  S.yt = 'calendar'; // รายงาน 10 โรคใช้ปีปฏิทินเท่านั้น (ปีงบใช้เฉพาะผลงานคุณภาพรายงาน DDS ซึ่งมีช่วงข้อมูลกำกับในหน้านั้น)
   if (!PAGES.some(x => x[0] === S.page)) S.page = 'overview';
-  if (p.get('y')) S.y = +p.get('y');
+  if (p.get('y')) S.y = Math.min(+p.get('y'), new Date().getFullYear() + 543);
   S.demo = p.get('demo') === '1';
 }
 function writeHash() {
@@ -130,21 +131,21 @@ function summaryLines(m) {
 function weekOpts() {
   const seen = new Set();
   for (const r of DB.rows) if (yearOf(r, S.yt) === S.y) seen.add(r.t);
-  return [...seen].sort((a, b) => b - a).map(t => { const v = ymd(t); return `<option value="${v}" ${S.wk === v ? 'selected' : ''}>ถึงสัปดาห์ ${epiWeek(t).week} (${thDate(t + 6 * DAY)})</option>`; }).join('');
+  return [...seen].sort((a, b) => b - a).map(t => { const v = ymd(t); return `<option value="${v}" ${S.wk === v ? 'selected' : ''}>ถึงสัปดาห์ ${epiWeek(t).week} (${thDate(epiWeek(t).to)})</option>`; }).join('');
 }
 
 // ---------- layout ----------
 function shell() {
-  const years = new Set([S.y, currentFiscalBE(Date.now())]);
+  const years = new Set([S.y, new Date().getFullYear() + 543]);
   DB.rows.forEach(r => years.add(yearOf(r, S.yt)));
-  const yOpts = [...years].sort((a, b) => b - a).map(y => `<option value="${y}" ${y === S.y ? 'selected' : ''}>${S.yt === 'fiscal' ? 'ปีงบ ' : 'พ.ศ. '}${y}</option>`).join('');
+  const yOpts = [...years].sort((a, b) => b - a).map(y => `<option value="${y}" ${y === S.y ? 'selected' : ''}>พ.ศ. ${y}</option>`).join('');
   $('#nav').innerHTML = PAGES.map(([id, t, ic]) => `<a href="#" data-page="${id}" class="${S.page === id ? 'active' : ''}">${ico(ic)}<span>${t}</span></a>`).join('');
   $('#topbar').innerHTML = `
     <div class="tb-group"><span class="tb-lbl" title="ตัวกรองข้อมูล">${ico('filter', 16)}</span>
-      <div class="seg"><button data-yt="fiscal" class="${S.yt === 'fiscal' ? 'on' : ''}">ปีงบประมาณ</button><button data-yt="calendar" class="${S.yt === 'calendar' ? 'on' : ''}">ปีปฏิทิน</button></div>
+      <span class="tb-lbl">ปี</span>
       <select id="fy" aria-label="ปี">${yOpts}</select>
       <select id="fwk" aria-label="ถึงสัปดาห์"><option value="">สัปดาห์ล่าสุด</option>${weekOpts()}</select></div>
-    <div class="tb-group"><select id="fdc" aria-label="อำเภอ"><option value="ALL">ทั้งจังหวัด (25 อำเภอ)</option>${DB.districts.map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
+    <div class="tb-group"><select id="fdc" aria-label="อำเภอ"><option value="ALL">ทั้งจังหวัด (25 อำเภอ)</option>${[...new Set(DB.districts.map(d => d.zone))].map(z => `${z ? `<optgroup label="${esc(z)}">` : ''}${DB.districts.filter(d => d.zone === z).map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}${z ? '</optgroup>' : ''}`).join('')}</select></div>
     <div class="tb-group"><select id="fd" aria-label="โรค"><option value="ALL">รวม 10 โรค</option>${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
     <div class="tb-group grow">${S.fac && facIndex().get(S.fac) ? `<span class="fac-chip"><button data-fac="${esc(S.fac)}" title="ดูรายละเอียด">${ico('unit', 15)} ${esc(S.fac)} ${esc(facIndex().get(S.fac).name || '')}</button><button id="facx" title="ยกเลิกการเลือกสถานพยาบาล" aria-label="ยกเลิก">${ico('close', 14)}</button></span>` : ''}<div class="search">${ico('search', 16)}<input id="q" type="search" autocomplete="off" placeholder="${S.fac ? 'เปลี่ยนสถานพยาบาล…' : 'ค้นหาสถานพยาบาล: รหัส 5 หลัก หรือชื่อ'}" aria-label="ค้นหาสถานพยาบาล"></div></div>
     <div class="tb-group tb-tools"><label class="switch" title="ดูด้วยข้อมูลจำลอง"><input type="checkbox" id="fdemo" ${S.demo ? 'checked' : ''}><span></span> จำลอง</label>
@@ -159,7 +160,7 @@ function header(m) {
   return `<header class="hero">
     <div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สถานการณ์ 10 โรคที่ต้องเฝ้าระวัง</h1>
     <div class="sub">${esc(distName(S.dc))}${S.fac && facIndex().get(S.fac) ? ' • ' + esc(facIndex().get(S.fac).name) : ''} • ${esc(periodLabel(m))}</div></div>
-    <div class="asof">${m.has ? `<b>${m.source === 'summary' ? 'ข้อมูล ณ ' + thDate(m.snapT, false) : 'ข้อมูลถึงสัปดาห์ที่ ' + m.week.week}</b><span>${m.source === 'summary' ? 'สัปดาห์ระบาดวิทยาที่ ' + m.week.week + ' • รายงานประจำสัปดาห์' : thDate(m.asOf) + ' – ' + thDate(m.asOfEnd)}</span>${fresh > 7 ? `<span class="stale">${ico('alert', 14)} ข้อมูลเก่า ${fresh} วัน</span>` : ''}` : '<b>ยังไม่มีข้อมูลรายสัปดาห์</b>'}</div>
+    <div class="asof">${m.has ? `<b>${m.source === 'summary' ? 'ข้อมูล ณ ' + thDate(m.snapT, false) : 'ข้อมูลถึงสัปดาห์ที่ ' + m.week.week}</b><span>${m.source === "summary" ? "สัปดาห์ระบาดวิทยาที่ " + m.week.week + " • รายงานประจำสัปดาห์" : thDate(m.week.from) + " – " + thDate(m.asOfEnd)}</span>${fresh > 7 ? `<span class="stale">${ico('alert', 14)} ข้อมูลเก่า ${fresh} วัน</span>` : ''}` : '<b>ยังไม่มีข้อมูลรายสัปดาห์</b>'}</div>
   </header>${S.demo ? '<div class="demo-banner">⚠ กำลังแสดง <b>ข้อมูลจำลอง</b> เพื่อทดลองระบบ — ห้ามใช้อ้างอิงหรือเผยแพร่</div>' : ''}`;
 }
 
@@ -168,6 +169,7 @@ function pageOverview() {
   const m = model();
   if (!m.has && DB.summary.length && !S.demo) return header(m) + summaryFallback();
   const sumSrc = m.source === 'summary';
+  const PV = prevYearSummary(m);
   const srcBadge = sumSrc ? `<span class="src">ที่มา: Excel รวบรวมรายงาน (ข้อมูล ณ ${thDate(m.snapT)})</span>` : `<span class="src">ที่มา: DDS รายเคส (ผู้ป่วยที่อาศัยใน${esc(distName(S.dc))})</span>`;
   const k = m.per;
   const topRate = [...k].filter(r => r.rate != null && r.cases).sort((a, b) => b.rate - a.rate)[0];
@@ -184,10 +186,11 @@ function pageOverview() {
   </section>
   <section class="grid2">
     <div class="card"><div class="card-h"><h2>ตาราง 10 โรค</h2>${srcBadge}</div>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>โรค</th><th class="r">ป่วย</th><th class="r">ตาย</th><th class="r">ต่อแสน</th><th class="r">CFR%</th><th class="r">${sumSrc ? 'เพิ่มจากสัปดาห์ก่อน' : 'เทียบปีก่อน'}</th><th>12 สัปดาห์</th><th>สถานะ</th></tr></thead><tbody>
-      ${k.map((r, i) => `<tr><td><a href="#" class="go-trend" data-d="${r.id}">${i + 1}. ${esc(r.name)}</a><div class="en">${esc(r.en)}</div></td><td class="r b">${fmt(r.cases)}</td><td class="r ${r.deaths ? 'red b' : ''}">${fmt(r.deaths)}</td><td class="r">${r.rate == null ? '–' : fmt(r.rate, 2)}</td><td class="r">${fmt(r.cfr, 2)}</td>
+      ${(() => { const pv = prevYearSummary(m); return pv ? `<p class="note">เทียบกับ ${esc(pv.label)}${pv.samePeriod ? '' : ' — ช่วงเวลาไม่เท่ากัน จึงไม่คำนวณร้อยละเปลี่ยนแปลง'}</p>` : ''; })()}
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>โรค</th>${prevYearSummary(m) ? `<th class="r prevcol">ป่วย ${prevYearSummary(m).year}</th><th class="r prevcol">ตาย ${prevYearSummary(m).year}</th>` : ''}<th class="r">ป่วย</th><th class="r">ตาย</th><th class="r">ต่อแสน</th><th class="r">CFR%</th><th class="r">${sumSrc ? 'เพิ่มจากสัปดาห์ก่อน' : 'เทียบปีก่อน'}</th><th>12 สัปดาห์</th><th>สถานะ</th></tr></thead><tbody>
+      ${k.map((r, i) => `<tr><td><a href="#" class="go-trend" data-d="${r.id}">${i + 1}. ${esc(r.name)}</a><div class="en">${esc(r.en)}</div></td>${PV ? `<td class="r prevcol">${PV.rows[i] ? fmt(PV.rows[i].cases) : '–'}</td><td class="r prevcol">${PV.rows[i] ? fmt(PV.rows[i].deaths) : '–'}</td>` : ''}<td class="r b">${fmt(r.cases)}</td><td class="r ${r.deaths ? 'red b' : ''}">${fmt(r.deaths)}</td><td class="r">${r.rate == null ? '–' : fmt(r.rate, 2)}</td><td class="r">${fmt(r.cfr, 2)}</td>
       <td class="r">${sumSrc ? (r.weekDelta == null ? '–' : `<span class="${r.weekDelta > 0 ? 'b' : 'muted'}">${r.weekDelta > 0 ? '+' : ''}${fmt(r.weekDelta)}</span>${r.weekDeltaDeaths ? ` <small class="red">(ตาย +${r.weekDeltaDeaths})</small>` : ''}`) : r.change == null ? '–' : `<span class="trend ${r.change > 0 ? 'up' : 'dn'}">${r.change > 0 ? '▲' : '▼'} ${fmt(Math.abs(r.change), 1)}%</span>`}</td><td>${sparkline(r.spark, LEVEL_COLOR[r.level] || COLORS.blue)}</td><td>${chip(r.level)}</td></tr>`).join('')}
-      </tbody><tfoot><tr><td>รวม 10 โรค</td><td class="r">${fmt(m.tot.c)}</td><td class="r">${fmt(m.tot.x)}</td><td class="r">${m.pop ? fmt(rate(m.tot.c, m.pop), 2) : '–'}</td><td class="r">${fmt(cfr(m.tot.x, m.tot.c), 2)}</td><td class="r">${sumSrc ? (m.weekDelta == null ? '–' : '+' + fmt(m.weekDelta)) : ch == null ? '–' : fmt(ch, 1) + '%'}</td><td></td><td></td></tr></tfoot></table></div>
+      </tbody><tfoot><tr><td>รวม 10 โรค</td>${PV ? `<td class="r prevcol">${fmt(PV.rows.reduce((a, r) => a + (r?.cases || 0), 0))}</td><td class="r prevcol">${fmt(PV.rows.reduce((a, r) => a + (r?.deaths || 0), 0))}</td>` : ''}<td class="r">${fmt(m.tot.c)}</td><td class="r">${fmt(m.tot.x)}</td><td class="r">${m.pop ? fmt(rate(m.tot.c, m.pop), 2) : '–'}</td><td class="r">${fmt(cfr(m.tot.x, m.tot.c), 2)}</td><td class="r">${sumSrc ? (m.weekDelta == null ? '–' : '+' + fmt(m.weekDelta)) : ch == null ? '–' : fmt(ch, 1) + '%'}</td><td></td><td></td></tr></tfoot></table></div>
       ${sumSrc && m.hasDds ? `<p class="note">ตัวเลขในตารางเป็นตัวเลขรายงานทางการประจำสัปดาห์ • สถานะสี กราฟ 12 สัปดาห์ และรายอำเภอ ใช้ DDS รายเคส (${fmt(m.ddsTot.c)} ราย ต่างจากทางการ ${fmt(Math.abs(m.tot.c - m.ddsTot.c))} ราย = ${fmt(Math.abs(m.tot.c - m.ddsTot.c) / (m.tot.c || 1) * 100, 2)}%) • ดูการตรวจยอดได้ที่หน้า "คุณภาพข้อมูล"</p>` : ''}</div>
     <div class="col">
       <div class="card"><div class="card-h"><h2>อัตราป่วยต่อแสนประชากร</h2></div>${hbars([...k].sort((a, b) => (b.rate || 0) - (a.rate || 0)).map(r => ({ label: r.name, value: r.rate, color: LEVEL_COLOR[r.level] })), { unit: 'ต่อแสน' })}</div>
@@ -246,8 +249,8 @@ function pageDistrict() {
         + (noBase ? '<p class="note warn">ยังไม่มีค่ามัธยฐาน 5 ปี จึงยังจัดสถานะสีไม่ได้ — แผนที่แสดงจำนวนผู้ป่วยสะสม (สีเข้ม = ผู้ป่วยมาก) แทน</p>' : legend());
     })()}</div>
     <div class="card"><div class="card-h"><h2>จัดอันดับอำเภอ</h2><span class="muted">${S.yt === 'fiscal' ? 'ปีงบ' : 'พ.ศ.'} ${S.y} สะสม</span></div>
-    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>อำเภอ</th><th class="r">ป่วย</th><th class="r">ตาย</th><th class="r">ต่อแสน</th><th class="r">${DB.config.alert.window_weeks} สัปดาห์</th><th>สถานะ</th></tr></thead><tbody>
-    ${sorted.map((r, i) => `<tr class="${S.dc === r.x.code ? 'sel' : ''}"><td>${i + 1}</td><td><a href="#" class="pick-dc" data-dc="${r.x.code}">${esc(r.x.name)}</a></td><td class="r b">${fmt(r.c)}</td><td class="r ${r.dd ? 'red b' : ''}">${fmt(r.dd)}</td><td class="r">${r.rt == null ? '–' : fmt(r.rt, 2)}</td><td class="r">${fmt(r.a.recent)}${r.a.ratio != null && isFinite(r.a.ratio) ? `<small class="muted"> (${fmt(r.a.ratio, 1)}×)</small>` : ''}</td><td>${chip(r.a.level)}</td></tr>`).join('')}
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>อำเภอ</th><th>โซน</th><th class="r">ป่วย</th><th class="r">ตาย</th><th class="r">ต่อแสน</th><th class="r">${DB.config.alert.window_weeks} สัปดาห์</th><th>สถานะ</th></tr></thead><tbody>
+    ${sorted.map((r, i) => `<tr class="${S.dc === r.x.code ? 'sel' : ''}"><td>${i + 1}</td><td><a href="#" class="pick-dc" data-dc="${r.x.code}">${esc(r.x.name)}</a></td><td class="muted">${esc(r.x.zone)}</td><td class="r b">${fmt(r.c)}</td><td class="r ${r.dd ? 'red b' : ''}">${fmt(r.dd)}</td><td class="r">${r.rt == null ? '–' : fmt(r.rt, 2)}</td><td class="r">${fmt(r.a.recent)}${r.a.ratio != null && isFinite(r.a.ratio) ? `<small class="muted"> (${fmt(r.a.ratio, 1)}×)</small>` : ''}</td><td>${chip(r.a.level)}</td></tr>`).join('')}
     </tbody></table></div></div>
   </section>`;
 }
@@ -255,7 +258,7 @@ function pageDistrict() {
 function pageTrend() {
   const m = model();
   if (!m.has) return header(m) + emptyNote();
-  const weeks = []; for (let t = sundayOf(m.from + 3 * DAY); t + 3 * DAY <= m.to; t += 7 * DAY) if (t + 3 * DAY >= m.from) weeks.push(t);
+  const weeks = []; for (let t = sundayOf(m.from); t <= m.to; t += 7 * DAY) weeks.push(t); // Thai epi weeks: W1 starts 1 Jan, last week ends 31 Dec
   const cur = weeks.map(t => t <= m.asOf ? cell(DB, t, S.d, S.dc).c : null);
   const prevHas = m.prevAvail;
   const prev = weeks.map(t => prevHas ? cell(DB, t - 364 * DAY, S.d, S.dc).c : null);
@@ -451,11 +454,26 @@ function pageContact() {
   <div class="faq">${DB.troubles.map(t => `<details><summary><span class="tag">${esc(t.system)}</span> ${esc(t.problem)}</summary><p>${esc(t.solution)}</p><p class="muted">ติดต่อ: ${esc(t.contact_role)}</p></details>`).join('')}</div></div>`;
 }
 
+// previous-year figures for comparison (official weekly report; same period if available, otherwise whole year)
+function prevYearSummary(m) {
+  if (m.dc !== 'ALL' || S.demo) return null;
+  const py = S.y - 1, cutMD = isFinite(m.asOfEnd) ? ymd(m.asOfEnd).slice(5) : '12-31';
+  const dates = [...new Set(DB.summary.filter(x => +x.year_be === py).map(x => x.date_to))].sort();
+  if (!dates.length) return null;
+  const same = dates.filter(d => d.slice(5) <= cutMD).pop();
+  const pick = same && same.slice(5) === cutMD ? same : dates[dates.length - 1];
+  const rows = DB.config.diseases.map(d => { const r = DB.summary.find(x => +x.year_be === py && x.date_to === pick && x.disease_id === d.id); return r ? { cases: +r.cases, deaths: +r.deaths, cfr: cfr(+r.deaths, +r.cases) } : null; });
+  const lbl = DB.summary.find(x => x.date_to === pick && +x.year_be === py)?.period_label || `พ.ศ. ${py}`;
+  return { year: py, label: lbl, samePeriod: pick.slice(5) === cutMD, full: pick.endsWith('12-31'), rows };
+}
+
 function infoModel(dc) {
   const m = model(dc);
+  const pv = prevYearSummary(m);
   return {
+    prev: pv, prevChange: pv && pv.samePeriod ? pctChange(m.tot.c, pv.rows.reduce((a, r) => a + (r?.cases || 0), 0)) : null, curLabel: `พ.ศ. ${S.y} (${thDate(m.from)} – ${thDate(m.asOfEnd)})`,
     office: DB.config.office, area: distName(dc), period: periodLabel(m), weekText: m.has ? `สัปดาห์ระบาดวิทยาที่ ${m.week.week}` : '',
-    cases: m.tot.c, deaths: m.tot.x, change: m.change, weekDelta: m.weekDelta, changeNote: 'ไม่มีข้อมูลปีก่อน', demo: S.demo,
+    cases: m.tot.c, deaths: m.tot.x, change: m.change ?? (pv && pv.samePeriod ? pctChange(m.tot.c, pv.rows.reduce((a, r) => a + (r?.cases || 0), 0)) : null), weekDelta: m.weekDelta, changeNote: 'ไม่มีข้อมูลปีก่อน', demo: S.demo,
     rows: m.per.map(r => ({ name: r.name, cases: r.cases, deaths: r.deaths, rate: r.rate, cfr: r.cfr, level: r.level })),
     summary: summaryLines(m).slice(1), source: DB.config.source_text + (m.source === 'summary' ? ' • รายงานประจำสัปดาห์ สสจ.อุบลราชธานี' : ''), asOfText: m.has ? `ข้อมูล ณ ${thDate(m.asOfEnd, false)}` : '', url: DB.config.dashboard_url, has: m.has
   };
@@ -544,6 +562,7 @@ function applyData() {
 }
 
 async function render() {
+  EPI.year = S.y - 543;
   writeHash(); shell();
   const main = $('#main');
   try { main.innerHTML = (RENDER[S.page] || pageOverview)(); }
