@@ -1,4 +1,4 @@
-import { loadAll, prepare, yearOf, parseISO, buildIndex, makeDemo, periodRange, currentFiscalBE, epiWeek, sundayOf, thDate, ymd, fmt, rate, cfr, pctChange, cell, alertLevel, baselineFor, detectClusters, LEVELS } from './data.js';
+import { loadAll, prepare, yearOf, parseISO, friendly, buildIndex, makeDemo, periodRange, currentFiscalBE, epiWeek, sundayOf, thDate, ymd, fmt, rate, cfr, pctChange, cell, alertLevel, baselineFor, detectClusters, LEVELS } from './data.js';
 import { hbars, sparkline, epiCurve, heatmap, COLORS, LEVEL_COLOR, LEVEL_TEXT } from './charts.js';
 import { renderMap } from './map.js';
 import { drawInfographic, SIZES } from './infographic.js';
@@ -28,17 +28,18 @@ const PAGES = [
 ];
 
 let DB, REAL_ROWS;
-const S = { page: 'overview', yt: 'fiscal', y: currentFiscalBE(Date.now()), dc: 'ALL', d: 'ALL', demo: false, size: 'social', src: '' };
+const S = { page: 'overview', yt: 'fiscal', y: currentFiscalBE(Date.now()), wk: '', dc: 'ALL', fac: '', d: 'ALL', demo: false, size: 'ppt', src: '' };
 
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
-  for (const k of ['page', 'yt', 'dc', 'd', 'size', 'src']) if (p.get(k)) S[k] = p.get(k);
+  for (const k of ['page', 'yt', 'dc', 'd', 'size', 'src', 'wk', 'fac']) if (p.get(k)) S[k] = p.get(k);
   if (!PAGES.some(x => x[0] === S.page)) S.page = 'overview';
   if (p.get('y')) S.y = +p.get('y');
   S.demo = p.get('demo') === '1';
 }
 function writeHash() {
   const p = new URLSearchParams({ page: S.page, yt: S.yt, y: S.y, dc: S.dc, d: S.d });
+  if (S.wk) p.set('wk', S.wk); if (S.fac) p.set('fac', S.fac);
   if (S.demo) p.set('demo', '1'); if (S.page === 'info') p.set('size', S.size); if (S.src) p.set('src', S.src);
   try { history.replaceState(null, '', '#' + p); } catch { }
 }
@@ -52,7 +53,8 @@ const chip = (lv, extra = '') => `<span class="chip ${lv}">${LEVEL_TEXT[lv] || '
 function model(dc = S.dc) {
   const [from, to] = periodRange(S.yt, S.y);
   const rows = DB.rows;
-  const inCur = r => yearOf(r, S.yt) === S.y;
+  const WK = S.wk ? parseISO(S.wk) : Infinity;
+  const inCur = r => yearOf(r, S.yt) === S.y && r.t <= WK;
   const lastT = rows.reduce((m, r) => inCur(r) && r.t > m ? r.t : m, -Infinity);
   const has = isFinite(lastT);
   const asOf = has ? lastT : NaN, asOfEnd = has ? Math.min(lastT + 6 * DAY, to, DB.dataEnd || Infinity) : NaN;
@@ -74,7 +76,7 @@ function model(dc = S.dc) {
   // province level + calendar year: use the official weekly figures (Excel รวบรวมรายงาน → summary_province.csv)
   let source = 'dds', snapT = NaN, prevSnapT = NaN;
   if (dc === 'ALL' && S.yt === 'calendar' && !S.demo && (DB.config.province_source || 'summary') === 'summary') {
-    const dates = [...new Set(DB.summary.filter(s => +s.year_be === S.y).map(s => s.date_to))].sort();
+    const dates = [...new Set(DB.summary.filter(s => +s.year_be === S.y && parseISO(s.date_to) <= WK + 6 * DAY).map(s => s.date_to))].sort();
     if (dates.length) {
       const last = dates[dates.length - 1], prevD = dates[dates.length - 2];
       source = 'summary'; snapT = parseISO(last); prevSnapT = prevD ? parseISO(prevD) : NaN;
@@ -121,6 +123,12 @@ function summaryLines(m) {
   return L;
 }
 
+function weekOpts() {
+  const seen = new Set();
+  for (const r of DB.rows) if (yearOf(r, S.yt) === S.y) seen.add(r.t);
+  return [...seen].sort((a, b) => b - a).map(t => { const v = ymd(t); return `<option value="${v}" ${S.wk === v ? 'selected' : ''}>ถึงสัปดาห์ ${epiWeek(t).week} (${thDate(t + 6 * DAY)})</option>`; }).join('');
+}
+
 // ---------- layout ----------
 function shell() {
   const years = new Set([S.y, currentFiscalBE(Date.now())]);
@@ -130,10 +138,11 @@ function shell() {
   $('#topbar').innerHTML = `
     <div class="tb-group"><span class="tb-lbl" title="ตัวกรองข้อมูล">${ico('filter', 16)}</span>
       <div class="seg"><button data-yt="fiscal" class="${S.yt === 'fiscal' ? 'on' : ''}">ปีงบประมาณ</button><button data-yt="calendar" class="${S.yt === 'calendar' ? 'on' : ''}">ปีปฏิทิน</button></div>
-      <select id="fy" aria-label="ปี">${yOpts}</select></div>
+      <select id="fy" aria-label="ปี">${yOpts}</select>
+      <select id="fwk" aria-label="ถึงสัปดาห์"><option value="">สัปดาห์ล่าสุด</option>${weekOpts()}</select></div>
     <div class="tb-group"><select id="fdc" aria-label="อำเภอ"><option value="ALL">ทั้งจังหวัด (25 อำเภอ)</option>${DB.districts.map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
     <div class="tb-group"><select id="fd" aria-label="โรค"><option value="ALL">รวม 10 โรค</option>${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
-    <div class="tb-group grow"><div class="search">${ico('search', 16)}<input id="q" type="search" autocomplete="off" placeholder="ค้นหาสถานพยาบาล: รหัส 5 หลัก หรือชื่อ" aria-label="ค้นหาสถานพยาบาล"></div></div>
+    <div class="tb-group grow">${S.fac && facIndex().get(S.fac) ? `<span class="fac-chip"><button data-fac="${esc(S.fac)}" title="ดูรายละเอียด">${ico('unit', 15)} ${esc(S.fac)} ${esc(facIndex().get(S.fac).name || '')}</button><button id="facx" title="ยกเลิกการเลือกสถานพยาบาล" aria-label="ยกเลิก">${ico('close', 14)}</button></span>` : ''}<div class="search">${ico('search', 16)}<input id="q" type="search" autocomplete="off" placeholder="${S.fac ? 'เปลี่ยนสถานพยาบาล…' : 'ค้นหาสถานพยาบาล: รหัส 5 หลัก หรือชื่อ'}" aria-label="ค้นหาสถานพยาบาล"></div></div>
     <div class="tb-group tb-tools"><label class="switch" title="ดูด้วยข้อมูลจำลอง"><input type="checkbox" id="fdemo" ${S.demo ? 'checked' : ''}><span></span> จำลอง</label>
       <button class="btn ghost sm" id="copylink" title="คัดลอกลิงก์มุมมองนี้">${ico('link', 15)} ลิงก์</button></div>`;
   $('#sidelinks').innerHTML = `<a class="btn ghost w" href="tools/update.html">${ico('upload', 16)} ศูนย์อัปเดตข้อมูล</a>`;
@@ -145,7 +154,7 @@ function header(m) {
   const logo = '';
   return `<header class="hero">
     <div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สถานการณ์ 10 โรคที่ต้องเฝ้าระวัง</h1>
-    <div class="sub">${esc(distName(S.dc))} • ${esc(periodLabel(m))}</div></div>
+    <div class="sub">${esc(distName(S.dc))}${S.fac && facIndex().get(S.fac) ? ' • ' + esc(facIndex().get(S.fac).name) : ''} • ${esc(periodLabel(m))}</div></div>
     <div class="asof">${m.has ? `<b>${m.source === 'summary' ? 'ข้อมูล ณ ' + thDate(m.snapT, false) : 'ข้อมูลถึงสัปดาห์ที่ ' + m.week.week}</b><span>${m.source === 'summary' ? 'สัปดาห์ระบาดวิทยาที่ ' + m.week.week + ' • รายงานประจำสัปดาห์' : thDate(m.asOf) + ' – ' + thDate(m.asOfEnd)}</span>${fresh > 7 ? `<span class="stale">${ico('alert', 14)} ข้อมูลเก่า ${fresh} วัน</span>` : ''}` : '<b>ยังไม่มีข้อมูลรายสัปดาห์</b>'}</div>
   </header>${S.demo ? '<div class="demo-banner">⚠ กำลังแสดง <b>ข้อมูลจำลอง</b> เพื่อทดลองระบบ — ห้ามใช้อ้างอิงหรือเผยแพร่</div>' : ''}`;
 }
@@ -192,7 +201,7 @@ function summaryFallback() {
   const same = prev && DB.summary.find(s => s.period_label === prev)?.date_to.slice(5) === rows[0].date_to.slice(5);
   const pop = DB.config.population_total;
   const tc = rows.reduce((a, r) => a + +r.cases, 0), tx = rows.reduce((a, r) => a + +r.deaths, 0);
-  return `<div class="notice">${ico('alert', 18)}<div><b>ยังไม่มีข้อมูลรายสัปดาห์ในช่วงเวลาที่เลือก</b> — แสดงตารางรวมจังหวัดจาก <code>summary_province.csv</code> (ตัวเลขจากสไลด์ 16 พ.ย. 69) อัตราป่วยใช้ประชากร ${fmt(pop)} คน ${S.dc !== 'ALL' ? '<br>ข้อมูลนี้เป็นระดับจังหวัด ยังแยกรายอำเภอไม่ได้' : ''}<br>เปิด "ดูด้วยข้อมูลจำลอง" เพื่อดูฟังก์ชันครบ หรือใช้ <a href="tools/convert.html">เครื่องมือแปลงไฟล์ DDS</a></div></div>
+  return `<div class="notice">${ico('alert', 18)}<div><b>ยังไม่มีข้อมูลรายสัปดาห์ในช่วงเวลาที่เลือก</b> — แสดงตารางรวมจังหวัดจากรายงานประจำสัปดาห์ อัตราป่วยใช้ประชากร ${fmt(pop)} คน ${S.dc !== 'ALL' ? '<br>ข้อมูลนี้เป็นระดับจังหวัด ยังแยกรายอำเภอไม่ได้' : ''}<br>เปิด "จำลอง" ที่แถบบนเพื่อดูการทำงานครบทุกส่วน</div></div>
   <section class="kpis">
     <div class="kpi"><div class="k-t">ผู้ป่วย 10 โรค</div><div class="k-v blue">${fmt(tc)}</div><div class="k-s">${esc(sel)}</div></div>
     <div class="kpi"><div class="k-t">ผู้เสียชีวิต</div><div class="k-v red">${fmt(tx)}</div><div class="k-s">CFR รวม ${fmt(cfr(tx, tc), 2)}%</div></div>
@@ -207,7 +216,7 @@ function summaryFallback() {
 function legend() {
   const A = DB.config.alert;
   return `<div class="legend-card">${['green', 'yellow', 'orange', 'red'].map(l => `${chip(l)}`).join('')}
-  <span class="muted">เกณฑ์: ผู้ป่วย ${A.window_weeks} สัปดาห์ล่าสุด เทียบมัธยฐาน 5 ปี — ≤ ${A.ratio_yellow} เท่า = ปกติ, > ${A.ratio_yellow} = เฝ้าระวัง, > ${A.ratio_orange} = ติดตาม, > ${A.ratio_red} = รุนแรง • มีผู้เสียชีวิตอย่างน้อย "${LEVEL_TEXT[A.death_min_level]}" • แก้เกณฑ์ได้ใน config.json</span></div>`;
+  <span class="muted">เกณฑ์: ผู้ป่วย ${A.window_weeks} สัปดาห์ล่าสุด เทียบมัธยฐาน 5 ปี — ≤ ${A.ratio_yellow} เท่า = ปกติ, > ${A.ratio_yellow} = เฝ้าระวัง, > ${A.ratio_orange} = ติดตาม, > ${A.ratio_red} = รุนแรง • มีผู้เสียชีวิตอย่างน้อย "${LEVEL_TEXT[A.death_min_level]}"</span></div>`;
 }
 
 function pageDistrict() {
@@ -270,7 +279,7 @@ function pageCluster() {
     <div class="kpi"><div class="k-t">ผู้ป่วย / เสียชีวิตในเหตุการณ์</div><div class="k-v red">${fmt(ev.reduce((a, e) => a + (+e.cases || 0), 0))} / ${fmt(ev.reduce((a, e) => a + (+e.deaths || 0), 0))}</div><div class="k-s">กลุ่มก้อน ${ev.filter(e => e.event_type === 'กลุ่มก้อน').length} • เฉพาะราย ${ev.filter(e => e.event_type === 'เฉพาะราย').length}</div></div>
     <div class="kpi"><div class="k-t">กลุ่มก้อนที่ระบบตรวจพบจาก DDS</div><div class="k-v blue">${cl.length}</div><div class="k-s">ยังไม่มีในทะเบียนเหตุการณ์ ${cl.filter(c => !c.mebs).length} พื้นที่ (${DB.config.alert.window_weeks} สัปดาห์ล่าสุด)</div></div>
   </section>
-  <div class="card"><div class="card-h"><h2>ทะเบียนเหตุการณ์ (Outbreak Verification / MEBS)</h2><span class="muted">อัปเดตจาก OutbreakVerificationList.docx ที่หน้า ศูนย์อัปเดตข้อมูล</span></div>
+  <div class="card"><div class="card-h"><h2>ทะเบียนเหตุการณ์ (Outbreak Verification / MEBS)</h2><span class="muted">จาก Outbreak Verification List</span></div>
   ${ev.length ? `<div class="events">${[...ev].sort((a, b) => closed(a) - closed(b) || String(b.first_onset).localeCompare(String(a.first_onset))).map(e => {
     const last = Date.parse(e.last_onset || e.first_onset); const days = isFinite(last) ? Math.floor((Date.now() - last) / DAY) : null;
     const lim = DB.config.diseases.find(z => z.id === e.disease_id)?.incubation_days || 28;
@@ -279,7 +288,7 @@ function pageCluster() {
     <div class="ev-grid"><div><span class="muted">พื้นที่</span>${esc(area(e)) || '–'}</div><div><span class="muted">ผู้ป่วย / ตาย</span><span><b>${esc(e.cases || 0)}</b> / <b class="${+e.deaths ? 'red' : ''}">${esc(e.deaths || 0)}</b> ราย</span></div>
     <div><span class="muted">เริ่มป่วย</span>${thDate(parseISO(e.first_onset))}</div><div><span class="muted">รับแจ้ง</span>${thDate(parseISO(e.received))} • ${esc(e.source)}</div></div>
     ${e.action ? `<div class="ev-act"><span class="muted">การดำเนินการ:</span> ${esc(e.action)}</div>` : ''}
-    <div class="ev-foot"><span class="chip ${lv}">${esc(e.status || 'ไม่ระบุสถานะ')}</span>${days != null && !closed(e) ? ` • ผ่านไป ${days} วัน${days >= lim ? ` <small class="muted">(เกิน ${lim} วัน พิจารณาปิดเหตุการณ์)</small>` : ''}` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">ยังไม่มีเหตุการณ์ในทะเบียน — อัปโหลด OutbreakVerificationList.docx ที่ ศูนย์อัปเดตข้อมูล</div>'}
+    <div class="ev-foot"><span class="chip ${lv}">${esc(e.status || 'ไม่ระบุสถานะ')}</span>${days != null && !closed(e) ? ` • ผ่านไป ${days} วัน${days >= lim ? ` <small class="muted">(เกิน ${lim} วัน พิจารณาปิดเหตุการณ์)</small>` : ''}` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">ยังไม่มีเหตุการณ์ในทะเบียน</div>'}
   <p class="note">แสดงเฉพาะข้อมูลระดับเหตุการณ์ ไม่แสดงอายุ เพศ โรคประจำตัว หรือรายละเอียดผู้ป่วยรายบุคคล (PDPA) • ขั้นตอน: รับแจ้ง → สอบสวน → ควบคุม → ติดตาม → ปิดเหตุการณ์</p></div>
   <div class="card"><div class="card-h"><h2>กลุ่มก้อนที่ตรวจพบอัตโนมัติจาก DDS รายเคส</h2><span class="muted">ตามเกณฑ์จำนวนขั้นต่ำของแต่ละโรค ในตำบลเดียวกัน ภายใน 1 ระยะฟักตัว</span></div>
   ${cl.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>โรค</th><th>อำเภอ</th><th>รหัสตำบล</th><th class="r">ผู้ป่วย</th><th>ช่วงสัปดาห์</th><th>ในทะเบียนเหตุการณ์</th></tr></thead><tbody>
@@ -310,8 +319,12 @@ function pageUnits() {
   const sorted = [...F].sort((a, b) => { const o = { red: 0, orange: 1, few: 2, green: 3 }; return o[fStat(a)[0]] - o[fStat(b)[0]] || (a.reports ? a.timely / a.reports : 2) - (b.reports ? b.timely / b.reports : 2); });
   const laoCheck = laoType && S.dc === 'ALL' ? (+laoType.total === laoTot.n && +laoType.reported === laoTot.r ? `<span class="chip green">ตรงกับ DDC Dashboard ${laoType.reported}/${laoType.total} แห่ง</span>` : `<span class="chip orange">DDC Dashboard ${laoType.reported}/${laoType.total} แห่ง ไม่ตรงกับผลรวมรายอำเภอ ${laoTot.r}/${laoTot.n}</span>`) : '';
   const kcard = (n, title, val, sub, lv, target) => `<div class="kpi step lv-${lv}"><div class="step-n">${n}</div><div class="k-t">${title}</div><div class="k-v ${lv === 'green' ? 'green' : lv === 'red' ? 'red' : lv === 'none' ? 'navy sm' : 'orange'}">${val}</div><div class="k-s">${sub}</div><div class="k-s"><b>เกณฑ์:</b> ${target}</div></div>`;
+  const selF = S.fac ? DB.facilities.find(f => f.unit_code === S.fac) : null;
+  const selStrip = selF ? (() => { const f = { ...selF, reported: +selF.reported, reports: +selF.reports, timely: +selF.timely }; const [lv, tx] = fStat(f); return `<div class="card sel-fac"><div class="card-h"><h2>${esc(f.unit_name)} <span class="muted">${esc(f.unit_code)} • ${esc(f.dds_type || f.unit_type)} • ${esc(f.district_name)}</span></h2><span class="chip ${lv}">${tx}</span></div>
+    <div class="ev-grid"><div><span class="muted">ส่งรายงาน</span><b>${f.reported ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</b></div><div><span class="muted">ทันเวลา (7 วัน)</span><b>${f.reports ? fmt(f.timely / f.reports * 100, 1) + '%' : '–'}</b> <small class="muted">${fmt(f.timely)} / ${fmt(f.reports)} รายงาน</small></div></div></div>`; })() : '';
   return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>คุณภาพการรายงานในระบบ DDS</h1><div class="sub">${esc(distName(S.dc))} • ${esc(per || 'ความครอบคลุมและความทันเวลา')}</div></div></header>
-  ${!F.length ? `<div class="notice">${ico('alert', 18)}<div><b>ยังไม่มีข้อมูลรายสถานพยาบาล</b> — Export ตารางจาก DDC Dashboard (หน้า 1 ความครอบคลุมและความทันเวลา) แล้วแปลงที่ <a href="tools/update.html">ศูนย์อัปเดตข้อมูล</a> ข้อ 4</div></div>` : ''}
+  ${!F.length ? `<div class="notice">${ico('alert', 18)}<div><b>ยังไม่มีข้อมูลรายสถานพยาบาล</b> — Export ตารางจาก DDC Dashboard (หน้า 1 ความครอบคลุมและความทันเวลา) แล้วอัปเดตที่ศูนย์อัปเดตข้อมูล</div></div>` : ''}
+  ${selStrip}
   <section class="kpis">
     ${kcard(1, 'ความครอบคลุมการส่งรายงาน', cov == null ? '–' : fmt(cov, 2) + '%', `${fmt(sum(F, 'reported'))} / ${fmt(sum(F, 'total'))} แห่ง`, lvCov(cov), `ครอบคลุมตามที่กำหนด (ตั้งไว้ ${K.coverage_target}%)`)}
     ${kcard(1, 'ความทันเวลา (ภายใน 7 วัน)', tim == null ? '–' : fmt(tim, 2) + '%', `${fmt(sum(F, 'timely'))} / ${fmt(sum(F, 'reports'))} รายงาน`, lvTim(tim), `มากกว่าร้อยละ ${K.timely_target}`)}
@@ -332,7 +345,7 @@ function pageUnits() {
   ${DB.ddsDistrict.length && DB.ddsDistrict.every(x => x.lao_pct === '') ? '<br>ร้อยละ "ผลการดำเนินงาน" ในชีต อปท. ไม่นำมาใช้ เพราะค่าถูกคัดลอกมาจากชีตใน/นอกสังกัด — แดชบอร์ดคำนวณใหม่จากจำนวนแห่ง' : ''}</p></div>
   ${F.length ? `<div class="card"><div class="card-h"><h2>สถานพยาบาลที่ไม่ส่งรายงาน / ต้องเร่งรัด / ติดตาม</h2><span class="muted">เร่งรัด = ทันเวลา < ${K.timely_target}% • ติดตาม = ${K.timely_target}–90% • ผ่าน ≥ 90%</span></div>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>สถานพยาบาล</th><th>ประเภท</th><th>อำเภอ</th><th class="r">รายงาน</th><th class="r">ทันเวลา</th><th class="r">%</th><th>สถานะ</th></tr></thead><tbody>
-  ${sorted.filter(f => ['red', 'orange'].includes(fStat(f)[0])).map(f => { const [lv, tx] = fStat(f); return `<tr><td class="b"><a href="#" data-fac="${esc(f.unit_code)}">${esc(f.unit_name)}</a><div class="en">${esc(f.unit_code)}</div></td><td>${esc(f.unit_type)}</td><td>${esc(f.district_name)}</td><td class="r">${fmt(f.reports)}</td><td class="r">${fmt(f.timely)}</td><td class="r">${f.reports ? fmt(f.timely / f.reports * 100, 1) : '–'}</td><td><span class="chip ${lv}">${tx}</span></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty ok">ไม่มีสถานพยาบาลที่ต้องเร่งรัด/ติดตาม ✓</td></tr>'}</tbody></table></div>
+  ${sorted.filter(f => ['red', 'orange'].includes(fStat(f)[0])).map(f => { const [lv, tx] = fStat(f); return `<tr class="${f.unit_code === S.fac ? 'sel' : ''}"><td class="b"><a href="#" data-fac="${esc(f.unit_code)}">${esc(f.unit_name)}</a><div class="en">${esc(f.unit_code)}</div></td><td>${esc(f.unit_type)}</td><td>${esc(f.district_name)}</td><td class="r">${fmt(f.reports)}</td><td class="r">${fmt(f.timely)}</td><td class="r">${f.reports ? fmt(f.timely / f.reports * 100, 1) : '–'}</td><td><span class="chip ${lv}">${tx}</span></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty ok">ไม่มีสถานพยาบาลที่ต้องเร่งรัด/ติดตาม ✓</td></tr>'}</tbody></table></div>
   <details class="more"><summary>แสดงสถานพยาบาลที่ผ่านเกณฑ์ / ส่ง zero report (${sorted.filter(f => !['red', 'orange'].includes(fStat(f)[0])).length} แห่ง)</summary><div class="tbl-wrap"><table class="tbl"><tbody>
   ${sorted.filter(f => !['red', 'orange'].includes(fStat(f)[0])).map(f => { const [lv, tx] = fStat(f); return `<tr><td>${esc(f.unit_name)} <span class="en">${esc(f.unit_code)}</span></td><td>${esc(f.unit_type)}</td><td>${esc(f.district_name)}</td><td class="r">${fmt(f.reports)}</td><td class="r">${f.reports ? fmt(f.timely / f.reports * 100, 1) + '%' : '–'}</td><td><span class="chip ${lv}">${tx}</span></td></tr>`; }).join('')}</tbody></table></div></details></div>` : ''}`;
 }
@@ -346,14 +359,14 @@ function pageQuality() {
   return header(m) + `
   <section class="kpis">
     <div class="kpi"><div class="k-t">ความสดใหม่ของข้อมูล</div><div class="k-v ${m.has && (Date.now() - m.asOfEnd) / DAY <= 7 ? 'green' : 'orange'} sm">${m.has ? Math.max(0, Math.floor((Date.now() - m.asOfEnd) / DAY)) + ' วัน' : '–'}</div><div class="k-s">${m.has ? 'สัปดาห์ล่าสุดสิ้นสุด ' + thDate(m.asOfEnd, false) : 'ยังไม่มีข้อมูลรายสัปดาห์'}</div></div>
-    <div class="kpi"><div class="k-t">รายงานทันเวลา</div><div class="k-v blue">${rep ? fmt(tim / rep * 100, 1) + '%' : '–'}</div><div class="k-s">${rep ? `${fmt(tim)} / ${fmt(rep)} รายงาน` : 'ยังไม่มี unit_quality.csv'}</div></div>
+    <div class="kpi"><div class="k-t">รายงานทันเวลา</div><div class="k-v blue">${rep ? fmt(tim / rep * 100, 1) + '%' : '–'}</div><div class="k-s">${rep ? `${fmt(tim)} / ${fmt(rep)} รายงาน` : 'ยังไม่มีข้อมูล'}</div></div>
     <div class="kpi"><div class="k-t">ข้อมูลครบถ้วน</div><div class="k-v blue">${rep ? fmt(com / rep * 100, 1) + '%' : '–'}</div><div class="k-s">มีวันเริ่มป่วย + ที่อยู่ระดับตำบล</div></div>
     <div class="kpi"><div class="k-t">ปัญหาที่ต้องแก้</div><div class="k-v ${iss.some(i => i.level === 'red') ? 'red' : 'green'}">${iss.filter(i => i.level === 'red').length}</div><div class="k-s">ข้อสังเกตอื่น ${iss.filter(i => i.level !== 'red').length}</div></div>
   </section>
   <section class="grid2">
     <div class="card"><div class="card-h"><h2>ผลตรวจความถูกต้องของข้อมูล (Data integrity)</h2></div>
     ${iss.length ? `<ul class="issues">${iss.map(i => `<li class="${i.level}"><span class="chip ${i.level}">${lv[i.level]}</span> ${esc(i.msg)}</li>`).join('')}</ul>` : '<div class="empty ok">ไม่พบปัญหา ✓</div>'}</div>
-    <div class="card"><div class="card-h"><h2>ไฟล์ที่โหลด</h2></div><table class="tbl"><thead><tr><th>ไฟล์</th><th class="r">แถว</th></tr></thead><tbody>${DB.loaded.map(f => `<tr><td><code>${esc(f.file)}</code></td><td class="r">${f.missing ? '<span class="muted">ไม่มีไฟล์</span>' : fmt(f.rows)}</td></tr>`).join('')}</tbody></table>
+    <div class="card"><div class="card-h"><h2>แหล่งข้อมูล</h2></div><table class="tbl"><thead><tr><th>ข้อมูล</th><th class="r">จำนวนรายการ</th></tr></thead><tbody>${DB.loaded.filter(f => !/config|contacts|troubleshoot|template/.test(f.file)).map(f => `<tr><td>${esc(friendly(f.file))}</td><td class="r">${f.missing ? '<span class="muted">ยังไม่มี</span>' : fmt(f.rows)}</td></tr>`).join('')}</tbody></table>
     <p class="note">กฎที่ระบบตรวจทุกครั้ง: วันที่เป็นวันอาทิตย์ (ต้นสัปดาห์ระบาด), รหัสโรค/อำเภอถูกต้อง, ตาย ≤ ป่วย, จำนวนเป็นจำนวนเต็ม, แถวซ้ำ, สัปดาห์ในอนาคต, ประชากรครบ</p></div>
   </section>`;
 }
@@ -365,7 +378,7 @@ function pageMeasures() {
   return header(m) + `<p class="lead">โรคที่อยู่ระดับ <b>ติดตาม</b> หรือ <b>รุนแรง</b> ใน${esc(distName(S.dc))} จะขึ้นมาก่อนพร้อมกรอบสี — ใช้เป็นเช็กลิสต์มาตรการ</p>
   <section class="measures">${ds.map(z => `<div class="card m-card lv-${lvl[z.id] || 'none'}"><div class="card-h"><h2>${esc(z.name)}</h2>${chip(lvl[z.id] || 'none')}</div>
   <ul class="check">${z.measures.map(x => `<li>${esc(x)}</li>`).join('')}</ul><div class="en">ระยะฟักตัวที่ใช้ตรวจกลุ่มก้อน: ${z.incubation_days} วัน</div></div>`).join('')}</section>
-  <p class="note">ทบทวนข้อความมาตรการให้ตรงตามแนวทางกรมควบคุมโรคล่าสุด แก้ได้ใน config.json (measures)</p>`;
+  <p class="note">อ้างอิงแนวทางกรมควบคุมโรค</p>`;
 }
 
 function pageContact() {
@@ -377,12 +390,12 @@ function pageContact() {
   return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>การติดต่อประสานงาน & แก้ปัญหาระบบ</h1></div></header>
   <section class="people">${lead.map(person).join('')}</section>
   <section class="grid2">
-  <div class="card"><div class="card-h"><h2>ผู้ประสานงาน</h2><span class="muted">data/contacts.csv</span></div><div class="contacts">${others.map(person).join('') || '<div class="empty">–</div>'}</div></div>
+  <div class="card"><div class="card-h"><h2>ผู้ประสานงาน</h2></div><div class="contacts">${others.map(person).join('') || '<div class="empty">–</div>'}</div></div>
   <div class="card"><div class="card-h"><h2>อัปเดตข้อมูลประจำสัปดาห์ (ทุกวันจันทร์)</h2></div>
   <ol class="steps"><li>อัปเดตชีต "สถานการณ์ 10 โรค" ใน Excel รวบรวมรายงาน</li><li>Export DDS รายเคส (ได้หลายไฟล์)</li><li>เปิด <a href="tools/update.html">ศูนย์อัปเดตข้อมูล</a> → แปลงไฟล์ → ดาวน์โหลด CSV</li><li>อัปโหลด CSV ทับในโฟลเดอร์ <code>data/</code> บน GitHub → Commit</li><li>ตรวจหน้า "คุณภาพข้อมูล" แล้วดาวน์โหลดภาพ Info</li></ol>
-  <p class="note">รายละเอียดสำหรับผู้ดูแลระบบอยู่ใน README.md และ tools/guide.html</p></div>
+  </div>
   </section>
-  <div class="card"><div class="card-h"><h2>ระบบมีปัญหา ทำอย่างไร</h2><span class="muted">จากคู่มือ D506APIs Semi-offline และ D506 สำหรับ JHCIS • data/troubleshoot.csv</span></div>
+  <div class="card"><div class="card-h"><h2>ระบบมีปัญหา ทำอย่างไร</h2><span class="muted">จากคู่มือ D506APIs Semi-offline และ D506 สำหรับ JHCIS</span></div>
   <div class="faq">${DB.troubles.map(t => `<details><summary><span class="tag">${esc(t.system)}</span> ${esc(t.problem)}</summary><p>${esc(t.solution)}</p><p class="muted">ติดต่อ: ${esc(t.contact_role)}</p></details>`).join('')}</div></div>`;
 }
 
@@ -397,13 +410,14 @@ function infoModel(dc) {
 }
 
 function pageInfo() {
-  return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สร้างภาพ Info รายงานประจำสัปดาห์</h1><div class="sub">เลือกอำเภอที่แถบซ้าย แล้วดาวน์โหลดภาพไปใช้ได้ทันที</div></div></header>
+  return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สร้างภาพ Info รายงานประจำสัปดาห์</h1><div class="sub">เลือกปี สัปดาห์ และอำเภอที่แถบด้านบน แล้วคัดลอกภาพไปวางใน PowerPoint ได้ทันที</div></div></header>
   <section class="info-wrap"><div class="card info-ctl">
     <label>ขนาดภาพ</label><select id="isize">${Object.entries(SIZES).map(([k, v]) => `<option value="${k}" ${S.size === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
-    <button class="btn" id="dl">${ico('down', 16)} ดาวน์โหลด PNG (${esc(distName(S.dc))})</button>
+    <button class="btn" id="copyimg">${ico('image', 16)} คัดลอกภาพ (วางใน PowerPoint ด้วย Ctrl+V)</button>
+    <button class="btn ghost" id="dl">${ico('down', 16)} ดาวน์โหลด PNG (${esc(distName(S.dc))})</button>
     <button class="btn ghost" id="dlall">${ico('down', 16)} ดาวน์โหลดครบ 25 อำเภอ + จังหวัด</button>
     <div id="dlmsg" class="muted"></div>
-    <p class="note">ภาพใช้ข้อมูลรวมระดับอำเภอเท่านั้น ไม่มีข้อมูลระบุตัวบุคคล (PDPA)</p>
+    <p class="note">ขนาด PowerPoint 16:9 วางเต็มสไลด์พอดี • ภาพใช้ข้อมูลรวมระดับอำเภอเท่านั้น ไม่มีข้อมูลระบุตัวบุคคล (PDPA)</p>
   </div><div class="card info-prev"><canvas id="cv"></canvas></div></section>`;
 }
 
@@ -444,21 +458,28 @@ function facStatus(f) {
   const rep = +f.reported, n = +f.reports, t = +f.timely;
   return !rep ? ['red', 'ไม่ส่งรายงาน'] : !n ? ['few', 'ส่ง zero report'] : t / n * 100 < K.timely_target ? ['red', 'เร่งรัด'] : t / n * 100 < 90 ? ['orange', 'ติดตาม'] : ['green', 'ผ่าน'];
 }
+function selectFac(code) {
+  const f = facIndex().get(code); if (!f) return;
+  const changed = S.fac !== code;
+  S.fac = code; if (f.dc) S.dc = f.dc;
+  if (changed) render().then(() => openFac(code)); else openFac(code);
+}
 function openFac(code) {
   const f = facIndex().get(code); if (!f) return;
   const fac = f.fac, [lv, tx] = facStatus(fac), K = DB.config.dds_kpi || { timely_target: 80 };
   const dn = DB.districts.find(d => d.code === f.dc)?.name || '';
   const uq = (f.uq || []).sort((a, b) => b.fiscal_year_be - a.fiscal_year_be);
-  $('#modal').innerHTML = `<div class="box" role="dialog" aria-modal="true" aria-label="${esc(f.name)}"><div class="box-h"><div><div class="eyebrow">${esc(f.type || 'สถานพยาบาล')} • รหัส ${esc(f.code)}${dn ? ' • อำเภอ' + esc(dn) : ''}</div><h2>${esc(f.name || f.code)}</h2></div><button id="mclose" aria-label="ปิด">${ico('close', 18)}</button></div>
+  $('#modal').innerHTML = `<div class="box" tabindex="-1" role="dialog" aria-modal="true" aria-label="${esc(f.name)}"><div class="box-h"><div><div class="eyebrow">${esc(f.type || 'สถานพยาบาล')} • รหัส ${esc(f.code)}${dn ? ' • อำเภอ' + esc(dn) : ''}</div><h2>${esc(f.name || f.code)}</h2></div><button id="mclose" aria-label="ปิด">${ico('close', 18)}</button></div>
   <div class="box-b">
     ${fac ? `<section class="kpis">
       <div class="kpi"><div class="k-t">ส่งรายงานใน DDS</div><div class="k-v ${+fac.reported ? 'green' : 'red'} sm">${+fac.reported ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</div><div class="k-s">${esc(fac.period_label)}</div></div>
       <div class="kpi"><div class="k-t">ความทันเวลา (7 วัน)</div><div class="k-v ${lv === 'green' ? 'green' : lv === 'red' ? 'red' : 'orange'}">${+fac.reports ? fmt(+fac.timely / +fac.reports * 100, 1) + '%' : '–'}</div><div class="k-s">${fmt(+fac.timely)} / ${fmt(+fac.reports)} รายงาน • เกณฑ์ > ${K.timely_target}%</div></div>
-      <div class="kpi"><div class="k-t">สถานะ</div><div class="k-v sm"><span class="chip ${lv}" style="font-size:16px">${tx}</span></div><div class="k-s">${lv === 'red' ? 'ต้องเร่งรัด/ติดตาม' : lv === 'orange' ? 'ใกล้เกณฑ์ ควรติดตาม' : ''}</div></div></section>` : '<div class="notice">ยังไม่มีข้อมูลความครอบคลุม/ทันเวลาของหน่วยนี้ใน facility_dds.csv</div>'}
+      <div class="kpi"><div class="k-t">สถานะ</div><div class="k-v sm"><span class="chip ${lv}" style="font-size:16px">${tx}</span></div><div class="k-s">${lv === 'red' ? 'ต้องเร่งรัด/ติดตาม' : lv === 'orange' ? 'ใกล้เกณฑ์ ควรติดตาม' : ''}</div></div></section>` : '<div class="notice">ยังไม่มีข้อมูลความครอบคลุม/ทันเวลาของหน่วยนี้</div>'}
     ${uq.length ? `<h3>รายงาน 10 โรคใน DDS รายเคส (อนุมัติแล้ว)</h3><table class="tbl"><thead><tr><th>ปีงบ</th><th class="r">รายงาน</th><th class="r">ส่งภายใน 7 วัน</th><th class="r">ครบถ้วน</th></tr></thead><tbody>${uq.map(q => `<tr><td>${esc(q.fiscal_year_be)}</td><td class="r">${fmt(+q.reports)}</td><td class="r">${fmt(+q.timely / +q.reports * 100, 1)}%</td><td class="r">${fmt(+q.complete / +q.reports * 100, 1)}%</td></tr>`).join('')}</tbody></table>` : ''}
-    <div class="dl" style="margin-top:14px">${f.dc ? `<button class="btn" data-dc-go="${f.dc}">ดูข้อมูลอำเภอ${esc(dn)}</button>` : ''}<button class="btn ghost" data-page-go="units">ดูคุณภาพรายงาน DDS</button></div>
+    <p class="note">ตัวกรองถูกตั้งเป็น ${esc(f.name || f.code)}${dn ? ` และอำเภอ${esc(dn)}` : ''} แล้ว — ปิดหน้าต่างนี้เพื่อดูข้อมูลในหน้าเดิม</p>
+    <div class="dl" style="margin-top:10px"><button class="btn" id="mclose2">ปิด และดูข้อมูลต่อ</button>${S.page !== 'units' ? '<button class="btn ghost" data-page-go="units">เปิดหน้าคุณภาพรายงาน DDS</button>' : ''}</div>
   </div></div>`;
-  $('#modal').hidden = false; $('#qres').hidden = true; $('#mclose').focus();
+  $('#modal').hidden = false; $('#qres').hidden = true; setTimeout(() => $('#modal .box')?.focus(), 0);
 }
 function closeModal() { $('#modal').hidden = true; }
 
@@ -490,25 +511,33 @@ const fileName = dc => `10โรค_${dc === 'ALL' ? 'จังหวัด' : D
 function bind() {
   document.addEventListener('input', e => { if (e.target.id === 'q') showResults(); });
   document.addEventListener('focusin', e => { if (e.target.id === 'q' && e.target.value) showResults(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); $('#qres').hidden = true; } if (e.key === 'Enter' && e.target.id === 'q') { const r = searchFac(e.target.value); if (r[0]) openFac(r[0].code); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); $('#qres').hidden = true; } if (e.key === 'Enter' && e.target.id === 'q') { e.preventDefault(); const r = searchFac(e.target.value); if (r[0]) selectFac(r[0].code); } });
   document.addEventListener('click', e => {
-    const fb = e.target.closest('[data-fac]'); if (fb) { e.preventDefault(); e.stopImmediatePropagation(); openFac(fb.dataset.fac); return; }
+    const fb = e.target.closest('[data-fac]'); if (fb) { e.preventDefault(); e.stopImmediatePropagation(); selectFac(fb.dataset.fac); return; }
+    if (e.target.closest('#facx')) { e.stopImmediatePropagation(); S.fac = ''; render(); return; }
+    if (e.target.closest('#mclose2')) { e.stopImmediatePropagation(); closeModal(); return; }
     if (!e.target.closest('#qres') && e.target.id !== 'q') $('#qres').hidden = true;
     if (e.target.id === 'modal' || e.target.closest('#mclose')) { e.stopImmediatePropagation(); closeModal(); return; }
-    const g = e.target.closest('[data-dc-go]'); if (g) { e.stopImmediatePropagation(); S.dc = g.dataset.dcGo; S.page = S.page === 'units' ? 'units' : 'district'; closeModal(); render(); return; }
+    const g = e.target.closest('[data-dc-go]'); if (g) { e.stopImmediatePropagation(); S.dc = g.dataset.dcGo; closeModal(); render(); return; }
     const pg = e.target.closest('[data-page-go]'); if (pg) { e.stopImmediatePropagation(); S.page = pg.dataset.pageGo; closeModal(); render(); return; }
   });
   document.addEventListener('click', async e => {
-    const t = e.target.closest('[data-page],[data-yt],.go-trend,.pick-dc,[data-dc],#copylink,#copysum,#dl,#dlall,#menuBtn');
+    const t = e.target.closest('[data-page],[data-yt],.go-trend,.pick-dc,[data-dc],#copylink,#copysum,#copyimg,#dl,#dlall,#menuBtn');
     if (!t) return;
     if (t.id === 'menuBtn') { document.body.classList.toggle('nav-open'); return; }
     e.preventDefault();
     if (t.dataset.page) { S.page = t.dataset.page; return render(); }
-    if (t.dataset.yt) { if (S.yt !== t.dataset.yt) { S.yt = t.dataset.yt; S.y = S.yt === 'fiscal' ? currentFiscalBE(Date.now()) : new Date().getFullYear() + 543; } return render(); }
+    if (t.dataset.yt) { if (S.yt !== t.dataset.yt) { S.yt = t.dataset.yt; S.wk = ''; S.y = S.yt === 'fiscal' ? currentFiscalBE(Date.now()) : new Date().getFullYear() + 543; } return render(); }
     if (t.classList.contains('go-trend')) { S.d = t.dataset.d; S.page = 'trend'; return render(); }
-    if (t.dataset.dc !== undefined && t.dataset.dc) { S.dc = S.dc === t.dataset.dc ? 'ALL' : t.dataset.dc; return render(); }
+    if (t.dataset.dc !== undefined && t.dataset.dc) { S.dc = S.dc === t.dataset.dc ? 'ALL' : t.dataset.dc; S.fac = ''; return render(); }
     if (t.id === 'copylink') { await navigator.clipboard?.writeText(location.href).catch(() => { }); t.textContent = 'คัดลอกแล้ว ✓'; return; }
     if (t.id === 'copysum') { await navigator.clipboard?.writeText(summaryLines(model()).join('\n')).catch(() => { }); t.textContent = 'คัดลอกแล้ว ✓'; return; }
+    if (t.id === 'copyimg') {
+      const msg = $('#dlmsg');
+      try { const blob = await new Promise(r => $('#cv').toBlob(r, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); msg.textContent = 'คัดลอกภาพแล้ว ✓ ไปที่ PowerPoint แล้วกด Ctrl+V'; }
+      catch { msg.textContent = 'เบราว์เซอร์นี้คัดลอกภาพไม่ได้ — ใช้ปุ่มดาวน์โหลด PNG แทน แล้วลากไฟล์ลงสไลด์'; }
+      return;
+    }
     if (t.id === 'dl') return downloadCanvas($('#cv'), fileName(S.dc));
     if (t.id === 'dlall') {
       const msg = $('#dlmsg'); const cv = document.createElement('canvas'); const list = ['ALL', ...DB.districts.map(d => d.code)];
@@ -518,7 +547,8 @@ function bind() {
   });
   document.addEventListener('change', e => {
     const id = e.target.id;
-    if (id === 'fy') S.y = +e.target.value; else if (id === 'fdc') S.dc = e.target.value; else if (id === 'fd') S.d = e.target.value;
+    if (id === 'fy') { S.y = +e.target.value; S.wk = ''; } else if (id === 'fwk') S.wk = e.target.value;
+    else if (id === 'fdc') { S.dc = e.target.value; if (S.fac && facIndex().get(S.fac)?.dc !== S.dc) S.fac = ''; } else if (id === 'fd') S.d = e.target.value;
     else if (id === 'fdemo') { S.demo = e.target.checked; applyData(); }
     else if (id === 'isize') S.size = e.target.value; else if (id === 'srcsel') S.src = e.target.value; else return; // #q (search) ignored
     render();

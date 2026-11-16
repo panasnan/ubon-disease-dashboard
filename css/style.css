@@ -220,11 +220,11 @@ details.more { margin-top: 12px; } details.more summary { cursor: pointer; font:
 .topbar { position: sticky; top: 0; z-index: 15; margin-left: var(--side); display: flex; flex-wrap: wrap; gap: 10px 10px; align-items: center; padding: 10px 26px; background: rgba(241,245,251,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .topbar + .qres + .modal + main, .topbar ~ main { padding-top: 16px; }
 .tb-group { display: flex; align-items: center; gap: 8px; }
-.tb-group.grow { flex: 1 1 200px; min-width: 200px; }
+.tb-group.grow { flex: 1 1 170px; min-width: 170px; }
 .tb-lbl { font: 600 13px var(--f-head); color: var(--muted); display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
-.topbar select { padding: 8px 8px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: 500 14px var(--f-head); max-width: 210px; }
+.topbar select { padding: 8px 6px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: 500 13.5px var(--f-head); max-width: 190px; }
 .topbar .seg { background: #E3E9F3; }
-.topbar .seg button { color: var(--muted); padding: 7px 12px; }
+.topbar .seg button { color: var(--muted); padding: 7px 9px; }
 .topbar .seg button.on { background: var(--navy); color: #fff; }
 .topbar .switch { margin: 0 !important; color: var(--muted) !important; font: 600 13px var(--f-head) !important; }
 .topbar .switch span { background: #C9D3E3; }
@@ -247,3 +247,8 @@ details.more { margin-top: 12px; } details.more summary { cursor: pointer; font:
 @media (max-width: 860px) { .topbar { margin-left: 0; padding: 10px 14px 10px 64px; } .topbar select { max-width: 150px; } .tb-lbl { display: none; } }
 @media print { .topbar { display: none; } }
 .tbl th.grp { text-align: center; background: #F1F5FB; border-bottom: 1px solid var(--line); color: var(--navy); }
+.fac-chip { display: inline-flex; align-items: center; background: var(--navy); color: #fff; border-radius: 12px; flex: none; max-width: 330px; }
+.fac-chip button { background: none; border: 0; color: #fff; font: 600 13px var(--f-head); padding: 8px 6px 8px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 290px; }
+.fac-chip button + button { padding: 8px 10px 8px 4px; opacity: .8; }
+.card.sel-fac { border: 2px solid var(--blue); }
+.topbar #fwk { max-width: 140px; } .topbar #fdc { max-width: 165px; } .topbar #fd { max-width: 120px; } .topbar #fy { max-width: 100px; }

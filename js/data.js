@@ -71,6 +71,10 @@ export const rate = (c, pop) => pop ? c / pop * 100000 : null;
 export const cfr = (d, c) => c ? d / c * 100 : 0;
 export const pctChange = (a, b) => b ? (a - b) / b * 100 : null;
 
+// friendly (no file extension) names for messages shown on the dashboard
+const FRIENDLY = { 'summary_province.csv': 'รายงานประจำสัปดาห์ (Excel)', 'districts.csv': 'ข้อมูลอำเภอ', 'baseline_5y.csv': 'ค่ามัธยฐาน 5 ปี', 'units.csv': 'รายชื่อหน่วยบริการ', 'unit_quality.csv': 'ผลการรายงานรายหน่วย', 'mebs_events.csv': 'ทะเบียนเหตุการณ์', 'contacts.csv': 'ผู้ประสานงาน', 'troubleshoot.csv': 'วิธีแก้ปัญหา', 'dds_district.csv': 'ผลงาน DDS รายอำเภอ', 'facility_dds.csv': 'ความครอบคลุมรายสถานพยาบาล', 'facility_types.csv': 'ความครอบคลุมตามประเภท', 'dds_status.csv': 'สถานะรายงาน DDS', 'map_districts.json': 'แผนที่อำเภอ', 'config.json': 'การตั้งค่าระบบ' };
+export const friendly = f => { f = String(f).replace(/^data\//, ''); const m = /^weekly_(\d{4})\.csv$/.exec(f); return m ? `DDS รายเคส ปีงบ ${m[1]}` : FRIENDLY[f] || f.replace(/\.[a-z]+$/, ''); };
+
 // ---- loading ----
 async function getText(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -84,7 +88,7 @@ export async function loadAll() {
   out.config = JSON.parse(await getText('data/config.json'));
   const csv = async (name, required) => {
     try { const p = parseCSV(await getText('data/' + name)); out.loaded.push({ file: name, rows: p.records.length }); return p.records; }
-    catch (e) { if (required) issues.push({ level: 'red', msg: `โหลดไฟล์ ${name} ไม่ได้ (${e.message})` }); else out.loaded.push({ file: name, rows: 0, missing: true }); return []; }
+    catch (e) { if (required) issues.push({ level: 'red', msg: `โหลด${friendly(name)}ไม่ได้ (${e.message})` }); else out.loaded.push({ file: name, rows: 0, missing: true }); return []; }
   };
   out.districts = (await csv('districts.csv', true)).map(r => ({ code: r.district_code, name: r.district_name, pop: +r.population || 0, gx: +r.grid_x, gy: +r.grid_y }));
   out.summary = await csv('summary_province.csv');
@@ -105,7 +109,7 @@ export async function loadAll() {
       const p = parseCSV(await getText(f));
       out.loaded.push({ file: f.replace('data/', ''), rows: p.records.length });
       p.records.forEach((r, i) => { r._file = f; r._line = i + 2; out.weeklyRaw.push(r); });
-    } catch (e) { issues.push({ level: 'red', msg: `โหลดไฟล์ ${f} ไม่ได้ (${e.message}) — ตรวจชื่อไฟล์ใน config.json` }); }
+    } catch (e) { issues.push({ level: 'red', msg: `โหลด${friendly(f)}ไม่ได้ (${e.message}) — ตรวจการตั้งค่าระบบ` }); }
   }
   try { out.geo = JSON.parse(await getText('data/ubon_districts.geojson')); out.loaded.push({ file: 'ubon_districts.geojson', rows: out.geo.features?.length || 0 }); }
   catch { out.geo = null; }
@@ -121,14 +125,14 @@ export function prepare(db) {
   db.rows = [];
   let bad = 0;
   for (const r of db.weeklyRaw) {
-    const where = `${r._file.replace('data/', '')} แถว ${r._line}`;
+    const where = `${friendly(r._file)} แถวที่ ${r._line}`;
     const t = parseISO(r.week_start);
     const c = Number(r.cases || 0), x = Number(r.deaths || 0);
     let err = null;
     if (!isFinite(t)) err = `วันที่ week_start "${r.week_start}" ไม่ใช่รูปแบบ ปปปป-ดด-วว (ค.ศ.)`;
     else if (new Date(t).getUTCDay() !== 0) err = `week_start ${r.week_start} ไม่ใช่วันอาทิตย์ (สัปดาห์ระบาดวิทยาเริ่มวันอาทิตย์)`;
-    else if (!dIds.has(r.disease_id)) err = `รหัสโรค "${r.disease_id}" ไม่มีใน config.json`;
-    else if (!dCodes.has(r.district_code)) err = `รหัสอำเภอ "${r.district_code}" ไม่มีใน districts.csv`;
+    else if (!dIds.has(r.disease_id)) err = `รหัสโรค "${r.disease_id}" ไม่มีในการตั้งค่า 10 โรค`;
+    else if (!dCodes.has(r.district_code)) err = `รหัสอำเภอ "${r.district_code}" ไม่ตรงกับรายชื่อ 25 อำเภอ`;
     else if (!Number.isInteger(c) || c < 0 || !Number.isInteger(x) || x < 0) err = `จำนวนป่วย/ตายต้องเป็นจำนวนเต็ม ≥ 0`;
     else if (x > c) err = `จำนวนตาย (${x}) มากกว่าจำนวนป่วย (${c})`;
     if (err) { bad++; if (bad <= 30) issues.push({ level: 'red', msg: `${where}: ${err} — ไม่นำมาคำนวณ` }); continue; }
@@ -146,16 +150,16 @@ export function prepare(db) {
   // population
   const popSum = districts.reduce((s, d) => s + d.pop, 0);
   db.hasDistrictPop = districts.every(d => d.pop > 0);
-  if (!db.hasDistrictPop) issues.push({ level: 'yellow', msg: 'districts.csv ยังไม่มีประชากรรายอำเภอครบ — อัตราป่วยรายอำเภอจะแสดง "–"' });
+  if (!db.hasDistrictPop) issues.push({ level: 'yellow', msg: 'ยังไม่มีประชากรรายอำเภอครบ — อัตราป่วยรายอำเภอจะแสดง "–"' });
   db.popTotal = db.hasDistrictPop ? popSum : config.population_total;
   if (db.hasDistrictPop && config.population_total && Math.abs(popSum - config.population_total) / config.population_total > 0.02)
-    issues.push({ level: 'yellow', msg: `ผลรวมประชากรรายอำเภอ (${fmt(popSum)}) ต่างจาก population_total ใน config (${fmt(config.population_total)}) เกิน 2% — ใช้ผลรวมรายอำเภอ` });
+    issues.push({ level: 'yellow', msg: `ผลรวมประชากรรายอำเภอ (${fmt(popSum)}) ต่างจากประชากรรวมจังหวัด (${fmt(config.population_total)}) เกิน 2% — ใช้ผลรวมรายอำเภอ` });
 
   // summary integrity (province table from slide)
   for (const s of db.summary) {
     const c = +s.cases, x = +s.deaths;
-    if (x > c) issues.push({ level: 'red', msg: `summary_province: ${s.disease_id} ${s.period_label} ตาย > ป่วย` });
-    if (s.note) issues.push({ level: 'yellow', msg: `summary_province: ${s.disease_id} ${s.period_label} — ${s.note}` });
+    if (x > c) issues.push({ level: 'red', msg: `รายงานประจำสัปดาห์ ${s.period_label}: ${s.disease_id} ตาย > ป่วย` });
+    if (s.note) issues.push({ level: 'yellow', msg: `รายงานประจำสัปดาห์ ${s.period_label}: ${config.diseases.find(d => d.id === s.disease_id)?.name || s.disease_id} — ${s.note}` });
     const dn = config.diseases.find(d => d.id === s.disease_id)?.name || s.disease_id;
     if (s.reported_rate !== '' && s.reported_rate != null && config.population_total) { const rc = c / config.population_total * 1e5; if (Math.abs(+s.reported_rate - rc) > 0.01) issues.push({ level: 'orange', msg: `Excel รวบรวมรายงาน (${s.date_to}): อัตราป่วย${dn}ในชีต ${(+s.reported_rate).toFixed(2)} แต่คำนวณได้ ${rc.toFixed(2)} — แดชบอร์ดใช้ค่าที่คำนวณใหม่` }); }
     if (s.reported_cfr !== '' && s.reported_cfr != null && c) { const fc = x / c * 100; if (Math.abs(+s.reported_cfr - fc) > 0.01) issues.push({ level: 'orange', msg: `Excel รวบรวมรายงาน (${s.date_to}): CFR ${dn} ในชีต ${(+s.reported_cfr).toFixed(2)}% แต่คำนวณได้ ${fc.toFixed(2)}%` }); }

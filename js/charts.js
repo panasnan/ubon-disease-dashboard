@@ -51,7 +51,7 @@ export function epiCurve({ weeks, cur, prev, base, ratioOrange = 1.5 }) {
   const step = Math.ceil(n / 13);
   const xl = weeks.map((t, i) => i % step ? '' : `<text x="${x(i)}" y="${H - B + 16}" class="ax" text-anchor="middle">W${epiWeek(t).week}</text><text x="${x(i)}" y="${H - B + 30}" class="ax sm" text-anchor="middle">${thDate(t)}</text>`).join('');
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟผู้ป่วยรายสัปดาห์">${g}${band}${bars}${pl}${xl}</svg>
-  <div class="legend"><span><i style="background:${COLORS.blue}"></i>ผู้ป่วยรายสัปดาห์</span><span><i class="ln dash"></i>ปีก่อนช่วงเดียวกัน</span>${hasBase ? `<span><i style="background:#16A47733"></i>ใต้ค่ามัธยฐาน 5 ปี</span><span><i class="ln org"></i>${ratioOrange}× มัธยฐาน (ติดตาม)</span>` : '<span class="muted">ยังไม่มีค่ามัธยฐาน 5 ปี — ใส่ baseline_5y.csv หรือข้อมูลย้อนหลัง 5 ปี</span>'}</div>`;
+  <div class="legend"><span><i style="background:${COLORS.blue}"></i>ผู้ป่วยรายสัปดาห์</span><span><i class="ln dash"></i>ปีก่อนช่วงเดียวกัน</span>${hasBase ? `<span><i style="background:#16A47733"></i>ใต้ค่ามัธยฐาน 5 ปี</span><span><i class="ln org"></i>${ratioOrange}× มัธยฐาน (ติดตาม)</span>` : '<span class="muted">ยังไม่มีค่ามัธยฐาน 5 ปี (รอข้อมูลย้อนหลัง 5 ปี)</span>'}</div>`;
 }
 
 export function heatmap(rowsLbl, weeks, matrix) {
