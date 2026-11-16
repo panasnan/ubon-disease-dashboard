@@ -72,7 +72,7 @@ export const cfr = (d, c) => c ? d / c * 100 : 0;
 export const pctChange = (a, b) => b ? (a - b) / b * 100 : null;
 
 // friendly (no file extension) names for messages shown on the dashboard
-const FRIENDLY = { 'summary_province.csv': 'รายงานประจำสัปดาห์ (Excel)', 'districts.csv': 'ข้อมูลอำเภอ', 'baseline_5y.csv': 'ค่ามัธยฐาน 5 ปี', 'units.csv': 'รายชื่อหน่วยบริการ', 'unit_quality.csv': 'ผลการรายงานรายหน่วย', 'mebs_events.csv': 'ทะเบียนเหตุการณ์', 'contacts.csv': 'ผู้ประสานงาน', 'troubleshoot.csv': 'วิธีแก้ปัญหา', 'dds_district.csv': 'ผลงาน DDS รายอำเภอ', 'facility_dds.csv': 'ความครอบคลุมรายสถานพยาบาล', 'facility_types.csv': 'ความครอบคลุมตามประเภท', 'dds_status.csv': 'สถานะรายงาน DDS', 'map_districts.json': 'แผนที่อำเภอ', 'config.json': 'การตั้งค่าระบบ' };
+const FRIENDLY = { 'summary_province.csv': 'รายงานประจำสัปดาห์ (Excel)', 'districts.csv': 'ข้อมูลอำเภอ', 'baseline_5y.csv': 'ค่ามัธยฐาน 5 ปี', 'units.csv': 'รายชื่อหน่วยบริการ', 'unit_quality.csv': 'ผลการรายงานรายหน่วย', 'mebs_events.csv': 'ทะเบียนเหตุการณ์', 'contacts.csv': 'ผู้ประสานงาน', 'troubleshoot.csv': 'วิธีแก้ปัญหา', 'dds_district.csv': 'ผลงาน DDS รายอำเภอ', 'facility_dds.csv': 'ความครอบคลุมรายสถานพยาบาล', 'facility_types.csv': 'ความครอบคลุมตามประเภท', 'dds_status.csv': 'สถานะรายงาน DDS', 'deaths_register.csv': 'ทะเบียนผู้เสียชีวิต (รายงานด้วยตนเอง)', 'revisions.csv': 'บันทึกการแก้ไขย้อนหลัง', 'map_districts.json': 'แผนที่อำเภอ', 'config.json': 'การตั้งค่าระบบ' };
 export const friendly = f => { f = String(f).replace(/^data\//, ''); const m = /^weekly_(\d{4})\.csv$/.exec(f); return m ? `DDS รายเคส ปีงบ ${m[1]}` : FRIENDLY[f] || f.replace(/\.[a-z]+$/, ''); };
 
 // ---- loading ----
@@ -102,6 +102,8 @@ export async function loadAll() {
   out.facilities = await csv('facility_dds.csv');
   out.facilityTypes = await csv('facility_types.csv');
   out.ddsStatus = (await csv('dds_status.csv')).slice(-1)[0] || null;
+  out.deathReg = await csv('deaths_register.csv');
+  out.revisions = await csv('revisions.csv');
   try { out.mapSvg = JSON.parse(await getText('data/map_districts.json')); out.loaded.push({ file: 'map_districts.json', rows: out.mapSvg.districts.length }); } catch { out.mapSvg = null; }
   out.weeklyRaw = [];
   for (const f of out.config.weekly_files || []) {
@@ -120,7 +122,7 @@ export async function loadAll() {
 export function prepare(db) {
   const { config, districts, issues } = db;
   const dIds = new Set(config.diseases.map(d => d.id));
-  const dCodes = new Set(districts.map(d => d.code));
+  const dCodes = new Set([...districts.map(d => d.code), config.out_of_province_code || '9999']);
   const seen = new Map();
   db.rows = [];
   let bad = 0;

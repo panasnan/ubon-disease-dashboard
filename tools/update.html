@@ -11,7 +11,7 @@
   .step-n { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: var(--blue); color: #fff; font: 700 15px var(--f-head); margin-right: 8px; }
   .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
   .row label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-  .row input { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: 500 14px var(--f-head); }
+  .row input, .row select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: 500 14px var(--f-head); }
   .dl { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
   .when { font-size: 12.5px; background: #EAF1FF; color: var(--royal); border-radius: 999px; padding: 2px 10px; margin-left: 6px; }
   .privacy { background: #E2F6EF; border-radius: 12px; padding: 10px 14px; color: #0E5F45; font-size: 14px; }
@@ -37,6 +37,21 @@
     <p class="muted">ดึงเฉพาะข้อมูลระดับเหตุการณ์ (โรค จำนวนป่วย/ตาย พื้นที่ วันเริ่มป่วย แหล่งข่าว การดำเนินการ สถานะ) — <b>ไม่ดึง</b> อายุ เพศ โรคประจำตัว หรืออาการรายบุคคล</p>
     <div class="row"><label>ไฟล์ .docx<input type="file" id="fC" accept=".docx"></label></div>
     <div id="outC"></div>
+  </div>
+
+  <div class="card"><div class="card-h"><h2><span class="step-n">5</span>ทะเบียนผู้เสียชีวิต (รายงานด้วยตนเอง ก่อนคีย์ DDS) <span class="when">เมื่อมีรายงานผู้เสียชีวิต</span></h2></div>
+    <p class="muted">ใช้เมื่อได้รับแจ้งผู้เสียชีวิตแล้ว แต่พื้นที่ยังไม่ได้คีย์ใน DDS — แดชบอร์ดจะนับรวมให้ และแสดงรายการรอคีย์จนกว่าจะติ๊ก "คีย์ใน DDS แล้ว" <b>ห้ามใส่ชื่อ เลขบัตร HN หรือที่อยู่บ้านเลขที่</b></p>
+    <div class="row" id="dform">
+      <label>วันที่รับรายงาน<input type="date" id="dr_report"></label>
+      <label>วันที่เสียชีวิต<input type="date" id="dr_death"></label>
+      <label>โรค<select id="dr_dis"></select></label>
+      <label>อำเภอ<select id="dr_dc"></select></label>
+      <label>ตำบล (ถ้ามี)<input id="dr_sd" placeholder="เช่น สำโรง"></label>
+      <label>แหล่งข่าว<input id="dr_src" placeholder="เช่น รพ.สรรพสิทธิประสงค์ / SRRT อำเภอ"></label>
+      <label>หมายเหตุ (ห้ามข้อมูลระบุตัวบุคคล)<input id="dr_note"></label>
+    </div>
+    <div class="dl"><button class="btn" id="dr_add">+ เพิ่มรายการ</button></div>
+    <div id="dr_list" style="margin-top:12px"></div>
   </div>
 
   <div class="card"><div class="card-h"><h2><span class="step-n">4</span>ความครอบคลุม/ทันเวลารายสถานพยาบาล (Export จาก DDC Dashboard) <span class="when">เดือนละครั้ง</span></h2></div>
@@ -129,6 +144,30 @@ $('#fA').onchange = async e => {
   }
   $('#outA').innerHTML = html + '<h3>ผลการตรวจ</h3>' + issueList(iss) + `<div class="dl">${dl.join('')}</div>`;
 };
+
+// ---------------- 5. Manual death register ----------------
+const DR_H = ['id', 'report_date', 'death_date', 'disease_id', 'district_code', 'subdistrict', 'source', 'dds_keyed', 'keyed_date', 'note'];
+let DR = (await getCSV('deaths_register.csv')).map(r => ({ ...r }));
+$('#dr_dis').innerHTML = CFG.diseases.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+$('#dr_dc').innerHTML = DIST.map(d => `<option value="${d.district_code}">${esc(d.district_name)}</option>`).join('');
+$('#dr_report').value = new Date().toISOString().slice(0, 10);
+const keyedV = v => /^(y|yes|ใช่|คีย์แล้ว)$/i.test(String(v || '').trim());
+const pii = s => /\d{13}|บ้านเลขที่|\bHN\b|^(นาย|นาง|นางสาว|น\.ส\.|ด\.ช\.|ด\.ญ\.)[ก-๙]|\s(นาย|นาง|นางสาว|น\.ส\.|ด\.ช\.|ด\.ญ\.)[ก-๙]/i.test(s);
+function drRender() {
+  const dn = id => CFG.diseases.find(d => d.id === id)?.name || id, an = c => DIST.find(d => d.district_code === c)?.district_name || c;
+  $('#dr_list').innerHTML = (DR.length ? `<table class="tbl"><thead><tr><th>รับรายงาน</th><th>เสียชีวิต</th><th>โรค</th><th>พื้นที่</th><th>แหล่งข่าว</th><th>คีย์ใน DDS แล้ว</th><th></th></tr></thead><tbody>${DR.map((r, i) => `<tr><td>${esc(r.report_date)}</td><td>${esc(r.death_date)}</td><td>${esc(dn(r.disease_id))}</td><td>${r.subdistrict ? 'ต.' + esc(r.subdistrict) + ' ' : ''}อ.${esc(an(r.district_code))}</td><td>${esc(r.source)}</td><td><label style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" data-k="${i}" ${keyedV(r.dds_keyed) ? 'checked' : ''}> ${keyedV(r.dds_keyed) ? 'แล้ว ' + esc(r.keyed_date || '') : '<span class="chip orange">รอคีย์</span>'}</label></td><td><button class="btn ghost sm" data-del="${i}">ลบ</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty">ยังไม่มีรายการ</div>')
+    + `<p class="note">รอคีย์ ${DR.filter(r => !keyedV(r.dds_keyed)).length} ราย • แก้ไขเสร็จแล้วดาวน์โหลดไฟล์ไปอัปโหลดทับในโฟลเดอร์ data/</p><div class="dl">${link('deaths_register.csv', DR_H, DR)}</div>`;
+}
+drRender();
+$('#dr_add').onclick = () => {
+  const r = { id: 'D' + Date.now().toString(36).toUpperCase(), report_date: $('#dr_report').value, death_date: $('#dr_death').value, disease_id: $('#dr_dis').value, district_code: $('#dr_dc').value, subdistrict: $('#dr_sd').value.trim(), source: $('#dr_src').value.trim(), dds_keyed: 'N', keyed_date: '', note: $('#dr_note').value.trim() };
+  if (!r.report_date) { alertBox('ใส่วันที่รับรายงาน'); return; }
+  if (pii(r.note) || pii(r.source) || /\d{6,}/.test(r.subdistrict)) { alertBox('พบข้อความที่อาจเป็นข้อมูลระบุตัวบุคคล (ชื่อ คำนำหน้า เลขบัตร บ้านเลขที่) — กรุณาลบออก'); return; }
+  DR.push(r); ['dr_death', 'dr_sd', 'dr_note'].forEach(i => $('#' + i).value = ''); drRender();
+};
+$('#dr_list').addEventListener('change', e => { const i = e.target.dataset.k; if (i == null) return; DR[i].dds_keyed = e.target.checked ? 'Y' : 'N'; DR[i].keyed_date = e.target.checked ? new Date().toISOString().slice(0, 10) : ''; drRender(); });
+$('#dr_list').addEventListener('click', e => { const i = e.target.dataset.del; if (i == null) return; DR.splice(+i, 1); drRender(); });
+function alertBox(msg) { $('#dr_list').insertAdjacentHTML('afterbegin', `<div class="notice">${esc(msg)}</div>`); setTimeout(() => $('#dr_list .notice')?.remove(), 4000); }
 
 // ---------------- 3. Outbreak Verification List ----------------
 $('#fC').onchange = async e => {

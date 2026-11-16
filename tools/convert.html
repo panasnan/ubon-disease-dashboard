@@ -34,7 +34,8 @@
     <div class="row" id="maps"></div>
     <div class="row" style="margin-top:12px">
       <label>นับเฉพาะสถานะรายงาน (คั่นด้วย ,)<input id="okStatus" value="อนุมัติแล้ว"></label>
-      <label>นับเฉพาะจังหวัดขณะป่วย (รหัส)<input id="prov" value="34"></label>
+      <label>จังหวัดขณะป่วย (รหัส) — แยกรายอำเภอเฉพาะจังหวัดนี้<input id="prov" value="34"></label>
+      <label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="keepOut" checked> เก็บผู้ป่วยจังหวัดอื่นไว้ในกลุ่ม "นอกจังหวัด" (ให้ยอดรวมใช้นิยามเดียวกับรายงานทางการ)</label>
       <label>ค่าที่หมายถึง "เสียชีวิต" (คั่นด้วย ,)<input id="deadVals" value="เสียชีวิต,ตาย,dead,died"></label>
     </div>
     <div style="margin-top:14px"><button class="btn" id="run">ตรวจสอบ รวม และแปลงข้อมูล</button> <span id="busy" class="muted"></span></div>
@@ -96,6 +97,7 @@ async function load() {
     return `<label class="${req ? 'req' : ''}">${label}<select data-k="${k}"><option value="">— ไม่มี —</option>${h0.map(h => `<option ${h === guess ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select></label>`;
   }).join('');
   for (const id of ['okStatus', 'prov', 'deadVals']) if (saved[id] != null) $('#' + id).value = saved[id];
+  if (saved.keepOut != null) $('#keepOut').checked = saved.keepOut;
   $('#mapCard').hidden = false; $('#resCard').hidden = true;
 }
 
@@ -136,7 +138,7 @@ $('#run').onclick = async () => {
   $('#busy').textContent = 'กำลังประมวลผล…'; await new Promise(r => setTimeout(r, 30));
   const list = v => v.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const deadSet = list($('#deadVals').value), okSet = list($('#okStatus').value), provF = $('#prov').value.trim();
-  store.set('ddsMap2', { ...map, okStatus: $('#okStatus').value, prov: provF, deadVals: $('#deadVals').value });
+  store.set('ddsMap2', { ...map, okStatus: $('#okStatus').value, prov: provF, deadVals: $('#deadVals').value, keepOut: $('#keepOut').checked });
 
   // 1) merge files, drop rows that are identical across files (overlapping exports)
   const seen = new Set(); let overlap = 0; const all = [];
@@ -150,17 +152,20 @@ $('#run').onclick = async () => {
   seen.clear();
 
   const agg = new Map(), uq = new Map(), units = new Map();
-  const ex = { status: new Map(), prov: 0, disease: new Map(), date: 0, district: new Map() };
+  const ex = { status: new Map(), prov: 0, provKept: 0, disease: new Map(), date: 0, district: new Map() };
+  const keepOut = $('#keepOut').checked, OUT = CFG.out_of_province_code || '9999';
   const dupKeys = new Map(); let ok = 0, deaths = 0, minT = Infinity, maxT = -Infinity;
   const per = {}; CFG.diseases.forEach(d => per[d.id] = { c: 0, x: 0 });
   const inc = (m, k) => m.set(k, (m.get(k) || 0) + 1);
   for (const r of all) {
     if (map.status && okSet.length) { const sv = String(r[map.status] || '').toLowerCase(); if (!okSet.includes(sv)) { inc(ex.status, r[map.status] || '(ว่าง)'); continue; } }
     const prov = map.province ? String(r[map.province] || '').trim() : provF;
-    if (map.province && provF && prov !== provF) { ex.prov++; continue; }
+    const outProv = map.province && provF && prov !== provF;
+    if (outProv && !keepOut) { ex.prov++; continue; }
+    if (outProv) ex.provKept++;
     const d = matchDisease(r[map.disease]); if (!d) { inc(ex.disease, r[map.disease] || '(ว่าง)'); continue; }
     const t = parseDate(r[map.onset]);
-    const dc = matchDistrict(r[map.district], prov || provF);
+    const dc = outProv ? OUT : matchDistrict(r[map.district], prov || provF);
     const fy = isFinite(t) ? currentFiscalBE(t) : null;
     if (map.unit && r[map.unit]) {
       const u = r[map.unit].trim(); const rep = map.report ? parseDate(r[map.report]) : NaN; const ufy = fy || (isFinite(rep) ? currentFiscalBE(rep) : null);
@@ -175,7 +180,7 @@ $('#run').onclick = async () => {
     if (map.cid && r[map.cid] && !/^0+$/.test(r[map.cid])) inc(dupKeys, r[map.cid] + '|' + d + '|' + t);
     const ws = ymd(epiWeek(t).start);
     let sd = map.subdistrict ? String(r[map.subdistrict] || '').replace(/^(ตำบล|ต\.)\s*/, '').trim() : '';
-    if (/^\d{1,2}$/.test(sd)) sd = dc + pad2(sd);
+    if (outProv) sd = ''; else if (/^\d{1,2}$/.test(sd)) sd = dc + pad2(sd);
     const row = { week_start: ws, disease_id: d, district_code: dc, subdistrict: sd, age_group: map.age ? ageGroup(r[map.age]) : '', sex: map.sex ? sexOf(r[map.sex]) : '', fiscal_year_be: fy, year_be: new Date(t).getUTCFullYear() + 543 };
     const key = Object.values(row).join('|'); const a = agg.get(key) || { ...row, cases: 0, deaths: 0 };
     a.cases++; per[d].c++; if (dead) { a.deaths++; deaths++; per[d].x++; } agg.set(key, a); ok++; minT = Math.min(minT, t); maxT = Math.max(maxT, t);
@@ -195,7 +200,7 @@ $('#run').onclick = async () => {
    <tr><td>แถวทั้งหมดในทุกไฟล์</td><td class="r b">${fmt(FILES.reduce((s, f) => s + f.records.length, 0))}</td></tr>
    <tr><td>− แถวซ้ำกันทุกช่องระหว่างไฟล์ (ช่วง export ทับกัน)</td><td class="r">${fmt(overlap)}</td></tr>
    <tr><td>− สถานะรายงานไม่ใช่ "${esc($('#okStatus').value)}": ${top(ex.status) || '–'}</td><td class="r">${fmt([...ex.status.values()].reduce((a, b) => a + b, 0))}</td></tr>
-   <tr><td>− ป่วยนอกจังหวัด (จังหวัดขณะป่วย ≠ ${esc(provF)})</td><td class="r">${fmt(ex.prov)}</td></tr>
+   <tr><td>${keepOut ? `ผู้ป่วยจังหวัดอื่น (จังหวัดขณะป่วย ≠ ${esc(provF)}) — เก็บไว้ในกลุ่ม "นอกจังหวัด" นับในยอดรวมจังหวัด ไม่แสดงในรายอำเภอ` : `− ป่วยนอกจังหวัด (จังหวัดขณะป่วย ≠ ${esc(provF)})`}</td><td class="r">${fmt(keepOut ? ex.provKept : ex.prov)}</td></tr>
    <tr><td>− ไม่อยู่ใน 10 โรค: ${top(ex.disease) || '–'}</td><td class="r">${fmt([...ex.disease.values()].reduce((a, b) => a + b, 0))}</td></tr>
    <tr><td>− วันเริ่มป่วยอ่านไม่ได้</td><td class="r">${fmt(ex.date)}</td></tr>
    <tr><td>− อำเภอไม่ตรงกับ districts.csv: ${top(ex.district) || '–'}</td><td class="r">${fmt([...ex.district.values()].reduce((a, b) => a + b, 0))}</td></tr>
@@ -209,11 +214,59 @@ $('#run').onclick = async () => {
   <p class="note">ตรวจยอดรายโรคเทียบกับหน้ารายงาน DDS ก่อนอัปโหลดทุกครั้ง</p>`;
   const header = ['week_start', 'disease_id', 'district_code', 'subdistrict', 'age_group', 'sex', 'fiscal_year_be', 'year_be', 'cases', 'deaths'];
   const byFy = {}; for (const a of agg.values()) (byFy[a.fiscal_year_be] = byFy[a.fiscal_year_be] || []).push(a);
+  const getCSV = async n => { try { const r = await fetch('../data/' + n, { cache: 'no-cache' }); return r.ok ? parseCSV(await r.text()).records : null; } catch { return null; } };
+
+  // ---- (1) reconciliation with the official weekly report (Excel รวบรวมรายงาน) ----
+  const summ = await getCSV('summary_province.csv') || [];
+  const yBE = isFinite(maxT) ? new Date(maxT).getUTCFullYear() + 543 : 0;
+  const snapD = [...new Set(summ.filter(x => +x.year_be === yBE).map(x => x.date_to))].sort().pop();
+  let recHTML = '';
+  if (snapD) {
+    const cut = Date.parse(snapD);
+    const dds = {}; CFG.diseases.forEach(d => dds[d.id] = { c: 0, x: 0 });
+    for (const a of agg.values()) if (+a.year_be === yBE && Date.parse(a.week_start) <= cut) { dds[a.disease_id].c += a.cases; dds[a.disease_id].x += a.deaths; }
+    const reg = (await getCSV('deaths_register.csv') || []).filter(r => !/^(y|yes|ใช่|คีย์แล้ว)$/i.test(r.dds_keyed || '') && String(new Date(Date.parse(r.death_date || r.report_date)).getUTCFullYear() + 543) === String(yBE));
+    const rows = CFG.diseases.map(d => { const o = summ.find(x => +x.year_be === yBE && x.date_to === snapD && x.disease_id === d.id) || { cases: 0, deaths: 0 }; const pend = reg.filter(r => r.disease_id === d.id).length; return { d, oc: +o.cases, ox: +o.deaths, dc: dds[d.id].c, dx: dds[d.id].x, pend }; });
+    const tc = rows.reduce((s, r) => s + r.oc, 0), td = rows.reduce((s, r) => s + r.dc, 0);
+    const chipC = (o, v) => { const df = v - o, p = o ? Math.abs(df) / o * 100 : (v ? 100 : 0); return `<span class="chip ${df === 0 ? 'green' : p <= 1 ? 'yellow' : 'red'}">${df === 0 ? 'ตรงกัน' : (df > 0 ? '+' : '') + fmt(df)}</span>`; };
+    recHTML = `<h3>ตรวจยอดกับรายงานทางการ (Excel ข้อมูล ณ ${esc(snapD)})</h3>
+    <p class="muted">ข้อมูล DDS ที่แปลงนับถึงวันเริ่มป่วย ${ymd(maxT)} • ส่วนต่างเล็กน้อยเกิดจากเวลาดึงข้อมูลต่างกัน • ผู้เสียชีวิตทางการรวมรายงานด้วยตนเองที่ยังไม่ได้คีย์ใน DDS</p>
+    <table class="tbl"><thead><tr><th>โรค</th><th class="r">ป่วย (ทางการ)</th><th class="r">ป่วย (DDS)</th><th>ส่วนต่าง</th><th class="r">ตาย (ทางการ)</th><th class="r">ตาย (DDS)</th><th class="r">รอคีย์ (ทะเบียน)</th><th>ส่วนต่าง</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${esc(r.d.name)}</td><td class="r">${fmt(r.oc)}</td><td class="r">${fmt(r.dc)}</td><td>${chipC(r.oc, r.dc)}</td><td class="r">${fmt(r.ox)}</td><td class="r">${fmt(r.dx)}</td><td class="r">${r.pend || '–'}</td><td>${r.ox === r.dx + r.pend ? '<span class="chip green">ตรงกัน</span>' : `<span class="chip ${r.ox > r.dx + r.pend ? 'orange' : 'red'}">${r.ox > r.dx + r.pend ? 'ทางการมากกว่า ' + (r.ox - r.dx - r.pend) : 'DDS มากกว่า ' + (r.dx + r.pend - r.ox)}</span>`}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td>รวม</td><td class="r">${fmt(tc)}</td><td class="r">${fmt(td)}</td><td>${chipC(tc, td)} <small class="muted">${tc ? fmt(Math.abs(td - tc) / tc * 100, 2) + '%' : ''}</small></td><td class="r">${fmt(rows.reduce((s, r) => s + r.ox, 0))}</td><td class="r">${fmt(rows.reduce((s, r) => s + r.dx, 0))}</td><td class="r">${rows.reduce((s, r) => s + r.pend, 0)}</td><td></td></tr></tfoot></table>
+    ${rows.some(r => r.ox > r.dx + r.pend) ? '<p class="note warn">ผู้เสียชีวิตทางการมากกว่า DDS + ทะเบียน — เพิ่มรายที่ยังไม่ได้คีย์ใน "ทะเบียนผู้เสียชีวิต" ที่ศูนย์อัปเดตข้อมูล ข้อ 5 เพื่อให้ติดตามจนคีย์ครบ</p>' : ''}`;
+  } else recHTML = '<p class="note">ยังไม่มีตัวเลขทางการของปีเดียวกันให้เทียบ — อัปเดต Excel รวบรวมรายงานที่ศูนย์อัปเดตข้อมูล ข้อ 1 ก่อน</p>';
+
+  // ---- (2) revisions: compare with the files currently on the dashboard ----
+  const PROV_W = CFG.provisional_weeks ?? 2;
+  const lastW = isFinite(maxT) ? epiWeek(maxT).start : 0;
+  const retro = []; let recentAdd = 0, compared = false;
+  for (const fy of Object.keys(byFy)) {
+    const old = await getCSV(`weekly_${fy}.csv`); if (!old || !old.length) continue; compared = true;
+    const hadOut = old.some(o => o.district_code === OUT);
+    const sumBy = (arr, get) => { const m = new Map(); for (const a of arr) { if (!hadOut && a.district_code === OUT) continue; const k = `${a.week_start}|${a.disease_id}|${a.district_code}`; const v = m.get(k) || { c: 0, x: 0 }; v.c += +get(a).cases; v.x += +get(a).deaths; m.set(k, v); } return m; };
+    const O = sumBy(old, a => a), N = sumBy(byFy[fy], a => a);
+    for (const k of new Set([...O.keys(), ...N.keys()])) {
+      const o = O.get(k) || { c: 0, x: 0 }, n = N.get(k) || { c: 0, x: 0 }; if (o.c === n.c && o.x === n.x) continue;
+      const [ws, d, dc] = k.split('|');
+      if (Date.parse(ws) > lastW - (PROV_W) * 7 * DAY) { recentAdd += n.c - o.c; continue; }
+      retro.push({ update_date: ymd(Date.now()), week_start: ws, disease_id: d, district_code: dc, old_cases: o.c, new_cases: n.c, old_deaths: o.x, new_deaths: n.x });
+    }
+  }
+  retro.sort((a, b) => a.week_start.localeCompare(b.week_start));
+  const dn = id => CFG.diseases.find(d => d.id === id)?.name || id, an = c => c === OUT ? 'นอกจังหวัด' : (DIST.find(x => x.district_code === c)?.district_name || c);
+  const revHTML = !compared ? '<p class="note">ยังไม่มีข้อมูลเดิมบนแดชบอร์ดให้เทียบ (การแปลงครั้งแรก)</p>' : `<h3>เทียบกับข้อมูลเดิมบนแดชบอร์ด</h3>
+    <section class="kpis"><div class="kpi"><div class="k-t">รายงานเพิ่มใน ${PROV_W} สัปดาห์ล่าสุด</div><div class="k-v blue">${recentAdd >= 0 ? '+' : ''}${fmt(recentAdd)}</div><div class="k-s">ปกติ — ข้อมูลเบื้องต้นที่ทยอยเข้ามา</div></div>
+    <div class="kpi"><div class="k-t">แก้ไขย้อนหลัง (เก่ากว่า ${PROV_W} สัปดาห์)</div><div class="k-v ${retro.length ? 'orange' : 'green'}">${fmt(retro.length)}</div><div class="k-s">จุด (สัปดาห์ × โรค × อำเภอ) • สุทธิ ${fmt(retro.reduce((s, r) => s + r.new_cases - r.old_cases, 0))} ราย</div></div></section>
+    ${retro.length ? `<table class="tbl"><thead><tr><th>สัปดาห์เริ่ม</th><th>โรค</th><th>อำเภอ</th><th class="r">ป่วย เดิม → ใหม่</th><th class="r">ตาย เดิม → ใหม่</th></tr></thead><tbody>${retro.slice(0, 40).map(r => `<tr><td>${r.week_start}</td><td>${esc(dn(r.disease_id))}</td><td>${esc(an(r.district_code))}</td><td class="r">${r.old_cases} → <b>${r.new_cases}</b></td><td class="r">${r.old_deaths !== r.new_deaths ? `${r.old_deaths} → <b class="red">${r.new_deaths}</b>` : r.new_deaths}</td></tr>`).join('')}</tbody></table>${retro.length > 40 ? `<p class="note">แสดง 40 จาก ${retro.length} จุด — ทั้งหมดอยู่ในไฟล์ revisions.csv</p>` : ''}` : ''}`;
+  const oldRev = await getCSV('revisions.csv') || [];
+  $('#report').insertAdjacentHTML('afterbegin', recHTML + revHTML + '<hr style="margin:20px 0;border:0;border-top:1px solid var(--line)">');
   const link = (name, csv) => { const b = new Blob(['\uFEFF' + csv], { type: 'text/csv' }); return `<a class="btn" download="${name}" href="${URL.createObjectURL(b)}">⬇ ${name}</a>`; };
   const unitRows = [...units.values()].map(u => ({ unit_code: u.unit_code, unit_name: u.unit_name, unit_type: unitType(u.unit_name), affiliation: '', district_code: [...u.dist].sort((a, b) => b[1] - a[1])[0]?.[0] || '', contact_name: '', phone: '' })).sort((a, b) => a.district_code.localeCompare(b.district_code) || a.unit_code.localeCompare(b.unit_code));
   $('#dls').innerHTML = Object.keys(byFy).sort().map(fy => link(`weekly_${fy}.csv`, toCSV(header, byFy[fy].sort((a, b) => a.week_start.localeCompare(b.week_start) || a.disease_id.localeCompare(b.disease_id) || a.district_code.localeCompare(b.district_code) || a.subdistrict.localeCompare(b.subdistrict))))).join('')
     + (uq.size ? link('unit_quality.csv', toCSV(['unit_code', 'fiscal_year_be', 'reports', 'timely', 'complete'], [...uq.values()])) : '')
     + (map.status ? link('dds_status.csv', toCSV(['period_label', 'date_from', 'date_to', 'approved', 'pending', 'cancelled'], [{ period_label: `วันเริ่มป่วย ${rng(minT, maxT)}`, date_from: isFinite(minT) ? ymd(minT) : '', date_to: isFinite(maxT) ? ymd(maxT) : '', ...stCount }])) : '')
+    + (retro.length ? link('revisions.csv', toCSV(['update_date', 'week_start', 'disease_id', 'district_code', 'old_cases', 'new_cases', 'old_deaths', 'new_deaths'], oldRev.filter(r => r.update_date !== ymd(Date.now())).concat(retro))) : '')
     + (units.size ? link('units.csv', toCSV(['unit_code', 'unit_name', 'unit_type', 'affiliation', 'district_code', 'contact_name', 'phone'], unitRows)) : '');
   $('#busy').textContent = ''; $('#resCard').hidden = false; $('#resCard').scrollIntoView({ behavior: 'smooth' });
 };

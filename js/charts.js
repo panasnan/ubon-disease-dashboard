@@ -24,7 +24,7 @@ export function sparkline(vals, color = COLORS.blue, w = 96, h = 26) {
 }
 
 // epi curve: bars = this period, dashed line = previous year, band = 5-yr median (+ orange line at ratio)
-export function epiCurve({ weeks, cur, prev, base, ratioOrange = 1.5 }) {
+export function epiCurve({ weeks, cur, prev, base, ratioOrange = 1.5, prov = [] }) {
   const W = 860, H = 280, L = 48, R = 12, T = 14, B = 40;
   const n = weeks.length;
   if (!n) return '<div class="empty">ยังไม่มีข้อมูลรายสัปดาห์</div>';
@@ -46,19 +46,19 @@ export function epiCurve({ weeks, cur, prev, base, ratioOrange = 1.5 }) {
       <path d="${pathOf(base.map((v, i) => v == null ? null : [x(i), y(v * ratioOrange)]))}" class="warnline"/>`;
     }
   }
-  const bars = cur.map((v, i) => { if (v == null) return ''; const c = hasBase && base[i] != null ? (v > base[i] * ratioOrange ? COLORS.orange : v > base[i] ? COLORS.yellow : COLORS.blue) : COLORS.blue; return `<rect x="${x(i) - bw / 2}" y="${y(v)}" width="${bw}" height="${y(0) - y(v)}" rx="2" fill="${c}" class="bar" style="--d:${i * 12}ms"><title>สัปดาห์ที่ ${epiWeek(weeks[i]).week} (${thDate(weeks[i])}): ${fmt(v)} ราย${base[i] != null ? ' | มัธยฐาน 5 ปี ' + fmt(base[i], 1) : ''}${prev[i] != null ? ' | ปีก่อน ' + fmt(prev[i]) : ''}</title></rect>`; }).join('');
+  const bars = cur.map((v, i) => { if (v == null) return ''; const c = hasBase && base[i] != null ? (v > base[i] * ratioOrange ? COLORS.orange : v > base[i] ? COLORS.yellow : COLORS.blue) : COLORS.blue; return `<rect x="${x(i) - bw / 2}" y="${y(v)}" width="${bw}" height="${y(0) - y(v)}" rx="2" fill="${c}" class="bar${prov[i] ? ' prov' : ''}" style="--d:${i * 12}ms"><title>${prov[i] ? '[ข้อมูลเบื้องต้น] ' : ''}สัปดาห์ที่ ${epiWeek(weeks[i]).week} (${thDate(weeks[i])}): ${fmt(v)} ราย${base[i] != null ? ' | มัธยฐาน 5 ปี ' + fmt(base[i], 1) : ''}${prev[i] != null ? ' | ปีก่อน ' + fmt(prev[i]) : ''}</title></rect>`; }).join('');
   const pl = prev.some(v => v != null) ? `<polyline points="${prev.map((v, i) => `${x(i)},${y(v || 0)}`).join(' ')}" class="prevline"/>` : '';
   const step = Math.ceil(n / 13);
   const xl = weeks.map((t, i) => i % step ? '' : `<text x="${x(i)}" y="${H - B + 16}" class="ax" text-anchor="middle">W${epiWeek(t).week}</text><text x="${x(i)}" y="${H - B + 30}" class="ax sm" text-anchor="middle">${thDate(t)}</text>`).join('');
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟผู้ป่วยรายสัปดาห์">${g}${band}${bars}${pl}${xl}</svg>
-  <div class="legend"><span><i style="background:${COLORS.blue}"></i>ผู้ป่วยรายสัปดาห์</span><span><i class="ln dash"></i>ปีก่อนช่วงเดียวกัน</span>${hasBase ? `<span><i style="background:#16A47733"></i>ใต้ค่ามัธยฐาน 5 ปี</span><span><i class="ln org"></i>${ratioOrange}× มัธยฐาน (ติดตาม)</span>` : '<span class="muted">ยังไม่มีค่ามัธยฐาน 5 ปี (รอข้อมูลย้อนหลัง 5 ปี)</span>'}</div>`;
+  <div class="legend"><span><i style="background:${COLORS.blue}"></i>ผู้ป่วยรายสัปดาห์</span>${prov.some(Boolean) ? `<span><i class="provi"></i>ข้อมูลเบื้องต้น (รายงานยังทยอยเข้า)</span>` : ''}<span><i class="ln dash"></i>ปีก่อนช่วงเดียวกัน</span>${hasBase ? `<span><i style="background:#16A47733"></i>ใต้ค่ามัธยฐาน 5 ปี</span><span><i class="ln org"></i>${ratioOrange}× มัธยฐาน (ติดตาม)</span>` : '<span class="muted">ยังไม่มีค่ามัธยฐาน 5 ปี (รอข้อมูลย้อนหลัง 5 ปี)</span>'}</div>`;
 }
 
-export function heatmap(rowsLbl, weeks, matrix) {
+export function heatmap(rowsLbl, weeks, matrix, provN = 0) {
   const max = Math.max(1, ...matrix.flat());
   const col = v => { if (!v) return '#F1F5FB'; const a = 0.15 + 0.85 * Math.sqrt(v / max); return `rgba(229,72,77,${a.toFixed(2)})`; };
-  return `<div class="heat-wrap"><table class="heat"><thead><tr><th></th>${weeks.map(t => `<th title="${thDate(t)}">${epiWeek(t).week}</th>`).join('')}</tr></thead><tbody>
-  ${rowsLbl.map((l, i) => `<tr><th>${esc(l)}</th>${matrix[i].map((v, j) => `<td style="background:${col(v)}" title="${esc(l)} สัปดาห์ ${epiWeek(weeks[j]).week}: ${fmt(v)} ราย">${v ? fmt(v) : ''}</td>`).join('')}</tr>`).join('')}
+  return `<div class="heat-wrap"><table class="heat"><thead><tr><th></th>${weeks.map((t, j) => `<th title="${thDate(t)}${j >= weeks.length - provN ? ' (ข้อมูลเบื้องต้น)' : ''}">${epiWeek(t).week}${j >= weeks.length - provN ? '*' : ''}</th>`).join('')}</tr></thead><tbody>
+  ${rowsLbl.map((l, i) => `<tr><th>${esc(l)}</th>${matrix[i].map((v, j) => `<td class="${j >= weeks.length - provN ? 'prov' : ''}" style="background:${col(v)}" title="${esc(l)} สัปดาห์ ${epiWeek(weeks[j]).week}: ${fmt(v)} ราย">${v ? fmt(v) : ''}</td>`).join('')}</tr>`).join('')}
   </tbody></table></div>`;
 }
 

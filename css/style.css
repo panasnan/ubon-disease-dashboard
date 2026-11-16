@@ -252,3 +252,6 @@ details.more { margin-top: 12px; } details.more summary { cursor: pointer; font:
 .fac-chip button + button { padding: 8px 10px 8px 4px; opacity: .8; }
 .card.sel-fac { border: 2px solid var(--blue); }
 .topbar #fwk { max-width: 140px; } .topbar #fdc { max-width: 165px; } .topbar #fd { max-width: 120px; } .topbar #fy { max-width: 100px; }
+.chart .bar.prov { fill-opacity: .45; stroke: currentColor; stroke-dasharray: 3 2; stroke-width: 1; color: #174EA6; }
+.legend i.provi { background: repeating-linear-gradient(45deg, #2671F288 0 3px, #fff 3px 6px); border: 1px dashed var(--royal); }
+.heat td.prov { opacity: .6; outline: 1px dashed #B4262B55; outline-offset: -2px; }
