@@ -163,7 +163,7 @@ function shell() {
     <div class="tb-group grow">${S.fac && facIndex().get(S.fac) ? `<span class="fac-chip"><button data-fac="${esc(S.fac)}" title="ดูรายละเอียด">${ico('unit', 15)} ${esc(S.fac)} ${esc(facIndex().get(S.fac).name || '')}</button><button id="facx" title="ยกเลิกการเลือกสถานพยาบาล" aria-label="ยกเลิก">${ico('close', 14)}</button></span>` : ''}<div class="search">${ico('search', 16)}<input id="q" type="search" autocomplete="off" placeholder="${S.fac ? 'เปลี่ยนสถานพยาบาล…' : 'ค้นหาสถานพยาบาล: รหัส 5 หลัก หรือชื่อ'}" aria-label="ค้นหาสถานพยาบาล"></div></div>
     <div class="tb-group tb-tools">
       <button class="btn ghost sm" id="copylink" title="คัดลอกลิงก์มุมมองนี้">${ico('link', 15)} ลิงก์</button></div>`;
-  $('#sidelinks').innerHTML = `<a class="btn ghost w" href="tools/update.html">${ico('upload', 16)} ศูนย์อัปเดตข้อมูล</a>`;
+  $('#sidelinks').innerHTML = ''; // หน้าเครื่องมือของผู้ดูแล (tools/update.html) ไม่แสดงลิงก์บนแดชบอร์ด — เปิดจาก bookmark
   $('#fdc').value = S.dc; $('#fd').value = S.d;
 }
 
@@ -588,8 +588,8 @@ function pageContact() {
   <section class="people">${lead.map(person).join('')}</section>
   <section class="grid2">
   <div class="card"><div class="card-h"><h2>ผู้ประสานงาน</h2></div><div class="contacts">${others.map(person).join('') || '<div class="empty">–</div>'}</div></div>
-  <div class="card"><div class="card-h"><h2>อัปเดตข้อมูลประจำสัปดาห์ (ทุกวันจันทร์)</h2></div>
-  <ol class="steps"><li>อัปเดตชีต "สถานการณ์ 10 โรค" ใน Excel รวบรวมรายงาน</li><li>Export DDS รายเคส (ได้หลายไฟล์)</li><li>เปิด <a href="tools/update.html">ศูนย์อัปเดตข้อมูล</a> → แปลงไฟล์ → ดาวน์โหลด CSV</li><li>อัปโหลด CSV ทับในโฟลเดอร์ <code>data/</code> บน GitHub → Commit</li><li>ตรวจหน้า "คุณภาพข้อมูล" แล้วดาวน์โหลดภาพ Info</li></ol>
+  <div class="card"><div class="card-h"><h2>รอบการอัปเดตข้อมูล</h2></div>
+  <ul class="steps"><li>ข้อมูลสถานการณ์ 10 โรค อัปเดต <b>ทุกวันจันทร์</b> โดยกลุ่มงานควบคุมโรคติดต่อ สสจ.อุบลราชธานี</li><li>ป้ายสัปดาห์แสดงสัปดาห์ระบาดวิทยาล่าสุดที่ครบ (อาทิตย์–เสาร์)</li><li>หากพบข้อมูลไม่ตรง โปรดแจ้งผู้รับผิดชอบงานตามรายชื่อด้านบน</li></ul>
   </div>
   </section>
   <div class="card"><div class="card-h"><h2>ระบบมีปัญหา ทำอย่างไร</h2><span class="muted">จากคู่มือ D506APIs Semi-offline และ D506 สำหรับ JHCIS</span></div>
