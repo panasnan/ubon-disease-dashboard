@@ -255,3 +255,24 @@ details.more { margin-top: 12px; } details.more summary { cursor: pointer; font:
 .chart .bar.prov { fill-opacity: .45; stroke: currentColor; stroke-dasharray: 3 2; stroke-width: 1; color: #174EA6; }
 .legend i.provi { background: repeating-linear-gradient(45deg, #2671F288 0 3px, #fff 3px 6px); border: 1px dashed var(--royal); }
 .heat td.prov { opacity: .6; outline: 1px dashed #B4262B55; outline-offset: -2px; }
+.tbl .prevcol { background: #F6F8FC; color: var(--muted); }
+
+/* ---- การ์ดรายโรค ---- */
+.dz-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; scroll-margin-top: 90px; animation: fadeUp .35s ease both; }
+.dz-head .eyebrow { color: var(--royal, #174EA6); font-size: 13px; font-weight: 600; letter-spacing: .02em; }
+.dz-head h2 { margin: 2px 0 0; font-size: 24px; color: var(--navy, #10234A); }
+.dz-head h2 small { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.dz-act { display: flex; gap: 8px; flex-wrap: wrap; }
+.kpi .k-v small { font-size: 15px; font-weight: 500; color: var(--muted); }
+.minibars { width: 100%; height: auto; display: block; }
+.mini-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.mini-leg i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+.mini-leg i.dash { height: 0; border-top: 2px dashed #F3A72F; border-radius: 0; width: 16px; vertical-align: 3px; }
+.tbl tr.sel td { background: #EAF1FE; }
+.tbl tr.sel td:first-child { box-shadow: inset 3px 0 0 #2671F2; }
+.tbl a.pick-d { color: inherit; text-decoration: none; border-bottom: 1px dashed #A9BEDF; }
+.tbl a.pick-d:hover { color: #2671F2; border-bottom-color: #2671F2; }
+.note.hint { margin: -4px 0 8px; font-size: 12.5px; }
+.asof .partial { align-self: flex-end; display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(243,167,47,.18); color: #FFD996; font-size: 12px; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.dz-act a.btn { text-decoration: none; }
