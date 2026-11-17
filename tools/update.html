@@ -56,9 +56,16 @@
 
   <div class="card"><div class="card-h"><h2><span class="step-n">4</span>ความครอบคลุม/ทันเวลารายสถานพยาบาล (Export จาก DDC Dashboard) <span class="when">เดือนละครั้ง</span></h2></div>
     <p class="muted">เลือกได้หลายไฟล์พร้อมกัน ระบบแยกให้เอง: <b>(ก) ตารางรายสถานพยาบาล</b> (คอลัมน์ อำเภอ, สถานพยาบาล, รายงานแล้ว, รายงานทันเวลา (7 วัน) (n) ...) และ <b>(ข) ตารางสรุปตามประเภทสถานพยาบาล</b> (โรงพยาบาลศูนย์ ... ศูนย์บริการสาธารณสุข อปท.)</p>
-    <p class="muted">⭐ <b>ผลงาน อปท. รายหน่วย:</b> ใน DDC Dashboard เลือกตัวกรอง <b>ประเภทสถานบริการ = ศูนย์บริการสาธารณสุข อปท.</b> แล้ว Export ตาราง (ก) อีกไฟล์ → ใส่ชื่อประเภทในช่องด้านล่าง → ระบบจะติดป้าย "อปท." ให้หน่วยเหล่านั้น และคำนวณความทันเวลาของ อปท. รายอำเภอจากข้อมูลดิบ</p>
-    <div class="row"><label>ไฟล์ .xlsx (เลือกได้หลายไฟล์)<input type="file" id="fD" accept=".xlsx" multiple></label><label>ช่วงข้อมูล (ตามตัวกรองปี/สัปดาห์ใน DDC Dashboard)<input id="periodD" value="ปีงบประมาณ 2569"></label><label>ถ้าไฟล์ (ก) ถูกกรองประเภทไว้ ใส่ชื่อประเภท (ไม่กรอง = เว้นว่าง)<input id="typeD" placeholder="เช่น ศูนย์บริการสาธารณสุข อปท."></label></div>
+    <p class="muted">⭐ <b>แยกประเภทสถานพยาบาล (ให้อำเภอตรวจสอบได้):</b> Export ตาราง (ก) เพิ่มอีก 3 ไฟล์จาก DDC Dashboard โดยเลือกตัวกรองประเภทสถานบริการ ① โรงพยาบาล (ทุกประเภท) ② รพ.สต. (สธ. + อปท.) ③ ศูนย์บริการสาธารณสุข อปท. → เลือกทั้ง 4–5 ไฟล์พร้อมกัน ระบบจะดูชื่อหน่วยแล้วจัดประเภทให้เอง ไม่ต้องพิมพ์ชื่อประเภท</p>
+    <div class="row"><label>ไฟล์ .xlsx (เลือกได้หลายไฟล์)<input type="file" id="fD" accept=".xlsx" multiple></label><label>ช่วงข้อมูล (ตามตัวกรองปี/สัปดาห์ใน DDC Dashboard)<input id="periodD" value="ปีงบประมาณ 2569"></label><label>(ไม่บังคับ) อัปโหลดไฟล์กรองประเภทไฟล์เดียว: ใส่ชื่อประเภท<input id="typeD" placeholder="เว้นว่างได้"></label></div>
     <div id="outD"></div>
+  </div>
+
+  <div class="card"><div class="card-h"><h2><span class="step-n">6</span>ผลตรวจสอบสถานพยาบาลจากอำเภอ <span class="when">เมื่ออำเภอส่งแบบตรวจสอบกลับ</span></h2></div>
+    <p class="muted">ใช้เมื่อ สสจ. ตรวจสอบแล้วว่าหน่วยใด "ไม่มีอยู่จริง/ปิดแล้ว" หรือ "ไม่ให้บริการตรวจรักษา" (ไม่ต้องให้อำเภอกรอก) ① ดาวน์โหลดแบบบันทึก (มีเฉพาะหน่วยที่ยังไม่ส่ง/ไม่มีผู้ป่วย) ② พิมพ์ผลในคอลัมน์ "ผลตรวจสอบ" เฉพาะหน่วยที่ทราบผล ③ อัปโหลดกลับที่นี่ → ได้ facility_verify.csv • แดชบอร์ดจะแสดงความครอบคลุมแบบปรับคู่กับตัวเลขทางการ</p>
+    <div class="dl"><button class="btn" id="dlV">⬇ ดาวน์โหลดแบบบันทึกผลตรวจสอบ (CSV เปิดด้วย Excel)</button></div>
+    <div class="row"><label>ไฟล์แบบตรวจสอบ (เลือกได้หลายไฟล์)<input type="file" id="fV" accept=".csv,.xlsx" multiple></label></div>
+    <div id="outV"></div>
   </div>
 </main>
 <script type="module">
@@ -232,18 +239,49 @@ $('#fD').onchange = async e => {
     iss.push(['red', `${esc(f.name)}: ไม่รู้จักรูปแบบตาราง`]);
   }
   let html = '', dl = [];
-  // base list (replace) and/or tagged list (merge into existing/base by unit code)
-  // several facility tables: the largest is the full list; with a type label the smallest is the filtered one
-  if (list) { list.sort((a, b) => b.length - a.length); list = tagLabel ? { base: list.length > 1 ? list[0] : null, tagged: list[list.length - 1] } : { base: list[0] }; }
-  let fac = list?.base || null;
-  if (list?.tagged) {
-    const cur = fac || await getCSV('facility_dds.csv');
-    if (!cur.length) iss.push(['red', 'ยังไม่มี facility_dds.csv เดิม — อัปโหลดไฟล์ (ก) ที่ไม่กรองประเภทพร้อมกันด้วย']);
-    const codes = new Set(list.tagged.map(o => o.unit_code));
-    fac = cur.map(o => codes.has(o.unit_code) ? { ...o, dds_type: tagLabel } : o);
-    const miss = list.tagged.filter(o => !cur.some(c => c.unit_code === o.unit_code));
-    if (miss.length) iss.push(['orange', `${miss.length} หน่วยในไฟล์ที่กรองประเภท ไม่พบในรายชื่อหลัก`]);
-    html += `<p>ติดป้ายประเภท <b>${esc(tagLabel)}</b> ให้ ${fmt(codes.size - miss.length)} หน่วย</p>`;
+  // หลายตาราง: ตารางใหญ่สุด = รายชื่อทั้งหมด • ตารางที่เล็กกว่า = ไฟล์ที่กรองประเภทไว้ ระบบดูชื่อหน่วยแล้วจัดประเภทให้เอง
+  let fac = null;
+  if (list) {
+    list.sort((a, b) => b.length - a.length);
+    const base = list[0], filt = list.slice(1);
+    if (!filt.length && tagLabel) { // แบบเดิม: ไฟล์กรองประเภทไฟล์เดียว → ติดป้ายให้รายชื่อเดิม
+      const cur = await getCSV('facility_dds.csv');
+      if (!cur.length) iss.push(['red', 'ยังไม่มี facility_dds.csv เดิม — อัปโหลดไฟล์ตารางรายสถานพยาบาลที่ไม่กรองประเภทพร้อมกันด้วย']);
+      const codes = new Set(base.map(o => o.unit_code));
+      fac = cur.map(o => codes.has(o.unit_code) ? { ...o, dds_type: tagLabel } : o);
+      html += `<p>ติดป้ายประเภท <b>${esc(tagLabel)}</b> ให้ ${fmt(codes.size)} หน่วย</p>`;
+    } else {
+      fac = base;
+      const share = (l, re) => l.filter(o => re.test(o.unit_name)).length / l.length;
+      const pcuL = filt.filter(l => share(l, /^รพ\.สต\.|ส่งเสริมสุขภาพตำบล/) >= 0.8).sort((a, b) => b.length - a.length);
+      const hospL = filt.filter(l => !pcuL.includes(l) && share(l, /^รพ\.|^โรงพยาบาล/) >= 0.8);
+      const laoTot = types?.find(t => /อปท/.test(t.dds_type))?.total;
+      let allPcu = null, lao = null;
+      if (pcuL.length >= 2) { allPcu = pcuL[0]; lao = pcuL[1]; }
+      else if (pcuL.length === 1) { if ((laoTot && pcuL[0].length === laoTot) || (!laoTot && pcuL[0].length < 150)) lao = pcuL[0]; else allPcu = pcuL[0]; }
+      filt.filter(l => !pcuL.includes(l) && !hospL.includes(l)).forEach(l => iss.push(['orange', `มีตารางที่กรองไว้ ${l.length} หน่วยที่ระบบไม่รู้ประเภท — ไม่ได้นำมาใช้`]));
+      if (filt.length) {
+        const S = l => new Set((l || []).map(o => o.unit_code)), H = new Set(hospL.flatMap(l => l.map(o => o.unit_code))), P = S(allPcu), L = S(lao);
+        const PRIV = /เอกชน|อุบลรักษ์|ราชเวช|พริ้นซ์|ชีวามิตรา|นิรันดร์|อินเตอร์เนชั่นแนล|คลินิก/;
+        fac = base.map(o => ({ ...o, dds_type: L.has(o.unit_code) ? 'รพ.สต. ถ่ายโอน อปท.' : P.has(o.unit_code) ? 'รพ.สต. สังกัด สธ.' : H.has(o.unit_code) ? (PRIV.test(o.unit_name) ? 'โรงพยาบาลเอกชน' : 'โรงพยาบาลรัฐ')
+          : /สถานบริการสาธารณสุขชุมชน/.test(o.unit_name) ? 'สถานบริการสาธารณสุขชุมชน (สสช.)' : /ศูนย์สุขภาพชุมชน|ศูนย์แพทย์ชุมชน/.test(o.unit_name) ? 'ศูนย์สุขภาพชุมชน (ศสม./PCU)' : (allPcu || !/^รพ\.สต\./.test(o.unit_name)) ? 'หน่วยงานเฉพาะ/คลินิก/อื่น ๆ' : '' }));
+        if (!allPcu && lao) fac.forEach(o => { if (!o.dds_type && /^รพ\.สต\./.test(o.unit_name)) o.dds_type = 'รพ.สต. สังกัด สธ.'; });
+        const miss = [...L, ...P, ...H].filter(c => !base.some(o => o.unit_code === c));
+        if (miss.length) iss.push(['orange', `${miss.length} หน่วยในไฟล์ที่กรองประเภท ไม่พบในรายชื่อหลัก`]);
+        const cnt = {}; fac.forEach(o => { const t = o.dds_type || '(ยังไม่จัดประเภท)'; cnt[t] = cnt[t] || { n: 0, r: 0 }; cnt[t].n++; cnt[t].r += +o.reported; });
+        html += `<h3>จัดประเภทสถานพยาบาลแล้ว</h3><table class="tbl"><thead><tr><th>ประเภท (สำหรับตรวจสอบ)</th><th class="r">ส่งแล้ว / ทั้งหมด</th></tr></thead><tbody>${Object.entries(cnt).map(([t, v]) => `<tr><td>${esc(t)}</td><td class="r">${v.r} / ${v.n}</td></tr>`).join('')}</tbody></table>`;
+        if (types) { // ตรวจไขว้กับตารางสรุปประเภทของ DDC
+          const T = re => types.filter(t => re.test(t.dds_type)).reduce((a, t) => ({ r: a.r + t.reported, n: a.n + t.total }), { r: 0, n: 0 });
+          const C = re => Object.entries(cnt).filter(([t]) => re.test(t)).reduce((a, [, v]) => ({ r: a.r + v.r, n: a.n + v.n }), { r: 0, n: 0 });
+          [['รพ.สต. ถ่ายโอน อปท.', /อปท/, /อปท/], ['รพ.สต. สังกัด สธ.', /ส่งเสริมสุขภาพตำบล/, /สังกัด สธ/], ['โรงพยาบาลเอกชน', /เอกชน/, /เอกชน/], ['โรงพยาบาลรัฐ', /^โรงพยาบาล(?!.*เอกชน)(?!ส่งเสริม)/, /โรงพยาบาลรัฐ/], ['สสช.', /สถานบริการสาธารณสุขชุมชน/, /สสช/]].forEach(([lb, rt, rc]) => {
+            const t = T(rt), c = C(rc); if (!t.n) return; iss.push([t.n === c.n && t.r === c.r ? 'green' : 'orange', `ตรวจไขว้ ${lb}: รายหน่วย ${c.r}/${c.n} แห่ง เทียบตารางสรุปประเภท ${t.r}/${t.n} แห่ง`]); });
+        }
+      } else { // ไฟล์รายชื่อทั้งหมดไฟล์เดียว: ใช้ประเภทเดิมจากรอบก่อน
+        const cur = await getCSV('facility_dds.csv'); const old = new Map(cur.map(o => [o.unit_code, o.dds_type]));
+        fac = base.map(o => ({ ...o, dds_type: old.get(o.unit_code) || '' }));
+        const un = fac.filter(o => !o.dds_type).length; if (un) iss.push(['yellow', `${un} หน่วยยังไม่มีประเภท — Export เพิ่มอีก 3 ไฟล์ที่กรอง "โรงพยาบาล", "รพ.สต." และ "ศูนย์บริการสาธารณสุข อปท." แล้วเลือกพร้อมกัน`]);
+      }
+    }
   }
   if (fac) {
     const n = k => fac.reduce((s, o) => s + +o[k], 0);
@@ -253,14 +291,52 @@ $('#fD').onchange = async e => {
     <div class="kpi"><div class="k-t">ความทันเวลา (7 วัน)</div><div class="k-v blue">${fmt(n('timely') / n('reports') * 100, 2)}%</div><div class="k-s">${fmt(n('timely'))} / ${fmt(n('reports'))} รายงาน</div></div></section>
     <p class="muted">ตรวจตัวเลข 2 ช่องนี้ให้ตรงกับหน้า DDC Dashboard ก่อนอัปโหลด</p>`;
     dl.push(link('facility_dds.csv', ['unit_code', 'unit_name', 'unit_type', 'dds_type', 'district_code', 'district_name', 'reported', 'total', 'timely', 'reports', 'period_label'], fac));
-    if (types) { const t = types.find(x => tagLabel && x.dds_type === tagLabel); const tagged = fac.filter(o => o.dds_type === tagLabel);
-      if (t && tagged.length) { const r = tagged.reduce((s, o) => s + +o.reported, 0); iss.push([r === t.reported && tagged.length === t.total ? 'green' : 'orange', `ตรวจไขว้ ${esc(tagLabel)}: รายหน่วย ${r}/${tagged.length} แห่ง เทียบตารางสรุปประเภท ${t.reported}/${t.total} แห่ง`]); } }
   }
   if (types) { html += `<h3>สรุปตามประเภทสถานพยาบาล</h3><table class="tbl"><thead><tr><th>ประเภท</th><th class="r">รายงานแล้ว</th><th class="r">ทั้งหมด</th><th class="r">ครอบคลุม</th></tr></thead><tbody>${types.map(t => `<tr><td>${esc(t.dds_type)}</td><td class="r">${t.reported}</td><td class="r">${t.total}</td><td class="r">${fmt(t.reported / t.total * 100, 1)}%</td></tr>`).join('')}</tbody></table>`;
     const tr = types.reduce((s, t) => s + t.reported, 0), tt = types.reduce((s, t) => s + t.total, 0);
     if (fac) { const n = k => fac.reduce((s, o) => s + +o[k], 0); iss.push([tr === n('reported') && tt === n('total') ? 'green' : 'orange', `ตรวจไขว้: ผลรวมตารางประเภท ${tr}/${tt} แห่ง เทียบรายสถานพยาบาล ${n('reported')}/${n('total')} แห่ง`]); }
     dl.push(link('facility_types.csv', ['dds_type', 'reported', 'total', 'period_label'], types)); }
   $('#outD').innerHTML = html + issueList(iss.filter(i => i[0] !== 'green')) + (iss.some(i => i[0] === 'green') ? `<ul class="issues">${iss.filter(i => i[0] === 'green').map(i => `<li><span class="chip green">ตรงกัน</span> ${i[1]}</li>`).join('')}</ul>` : '') + `<div class="dl">${dl.join('')}</div>`;
+};
+
+// ---------------- 6. ผลตรวจสอบสถานพยาบาลจากอำเภอ ----------------
+const VST = ['เปิดให้บริการ ต้องส่งรายงาน', 'เปิดให้บริการ แต่ รพ.แม่ข่ายคีย์แทน', 'ไม่ให้บริการตรวจรักษา', 'ไม่มีอยู่จริง/ปิดแล้ว'];
+const normSt = v => { v = String(v || '').trim(); if (!v) return ''; if (/ไม่มีอยู่|(?<!เ)ปิด|ยุบ|ซ้ำ/.test(v)) return VST[3]; if (/ไม่ให้บริการ|ไม่ตรวจรักษา|ไม่มี\s*OPD/i.test(v)) return VST[2]; if (/แม่ข่าย|คีย์แทน|ส่งผ่าน/.test(v)) return VST[1]; if (/เปิด|มีอยู่|ให้บริการ|ต้องส่ง/.test(v)) return VST[0]; return null; };
+$('#fV').onchange = async e => {
+  const files = [...e.target.files]; if (!files.length) return; $('#outV').innerHTML = 'กำลังอ่าน…';
+  const iss = [], got = new Map(); const FAC = await getCSV('facility_dds.csv'); const known = new Map(FAC.map(f => [f.unit_code, f]));
+  for (const f of files) {
+    let rows;
+    if (/\.csv$/i.test(f.name)) { const t = await f.text(); const p = parseCSV(t); rows = [p.header, ...p.records.map(r => p.header.map(h => r[h]))]; }
+    else rows = (await readWorkbook(f))[0]?.rows || [];
+    const hi = rows.findIndex(r => r.some(v => /รหัส/.test(v)) && r.some(v => /ผลตรวจสอบ/.test(v)));
+    if (hi < 0) { iss.push(['red', `${esc(f.name)}: ไม่พบคอลัมน์ "รหัสสถานพยาบาล" และ "ผลตรวจสอบ" — ใช้แบบตรวจสอบที่ดาวน์โหลดจากแดชบอร์ด`]); continue; }
+    const H = rows[hi], ci = re => H.findIndex(v => re.test(v)), cC = ci(/รหัส/), cS = ci(/ผลตรวจสอบ/), cN = ci(/หมายเหตุ/), cB = ci(/ผู้ตรวจสอบ/), cD = ci(/วันที่ตรวจสอบ/);
+    let n = 0;
+    for (const r of rows.slice(hi + 1)) {
+      const code = String(r[cC] || '').replace(/[^0-9]/g, '').padStart(5, '0'); if (!/^\d{5}$/.test(code) || code === '00000') continue;
+      const st = normSt(r[cS]); if (st === '') continue;
+      if (st === null) { iss.push(['orange', `${esc(f.name)}: ${code} ผลตรวจสอบ "${esc(r[cS])}" ไม่ตรงตัวเลือก — ข้ามรายการนี้`]); continue; }
+      if (!known.has(code)) iss.push(['orange', `${esc(f.name)}: รหัส ${code} ไม่อยู่ในรายชื่อสถานพยาบาลปัจจุบัน`]);
+      if (st === VST[0] && known.has(code) && !+known.get(code).reported) iss.push(['yellow', `${esc(known.get(code).unit_name)} (${code}): อำเภอยืนยันว่าเปิดให้บริการ แต่ยังไม่ส่งรายงาน — ควรติดตาม`]);
+      got.set(code, { unit_code: code, status: st, note: String(r[cN] ?? '').trim(), checked_by: String(r[cB] ?? '').trim(), checked_date: String(r[cD] ?? '').trim() }); n++;
+    }
+    iss.push(['green', `${esc(f.name)}: อ่านผลตรวจสอบได้ ${n} หน่วย`]);
+  }
+  const old = await getCSV('facility_verify.csv'); const m = new Map(old.map(o => [String(o.unit_code).padStart(5, '0'), o])); got.forEach((v, k) => m.set(k, v));
+  const out = [...m.values()].sort((a, b) => a.unit_code.localeCompare(b.unit_code));
+  const cnt = VST.map(s => [s, out.filter(o => o.status === s).length]);
+  $('#outV').innerHTML = `<h3>ผลตรวจสอบรวม ${out.length} หน่วย (ใหม่/แก้ไข ${got.size})</h3><table class="tbl"><tbody>${cnt.map(([s, n]) => `<tr><td>${esc(s)}</td><td class="r">${n}</td></tr>`).join('')}</tbody></table>`
+    + issueList(iss) + `<div class="dl">${link('facility_verify.csv', ['unit_code', 'status', 'note', 'checked_by', 'checked_date'], out)}</div><p class="note">อัปโหลด facility_verify.csv ไปที่โฟลเดอร์ data/ ใน GitHub • หน่วยที่ "ไม่มีอยู่จริง/ปิดแล้ว" ควรแจ้ง สคร.10 ให้ปรับทะเบียนใน DDS ด้วย</p>`;
+};
+
+$('#dlV').onclick = async () => {
+  const F = await getCSV('facility_dds.csv'), old = new Map((await getCSV('facility_verify.csv')).map(o => [String(o.unit_code).padStart(5, '0'), o]));
+  const q = v => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
+  const head = ['อำเภอ', 'รหัสสถานพยาบาล', 'ชื่อสถานพยาบาล', 'ประเภท', 'สถานะในระบบ DDS', 'ผลตรวจสอบ (พิมพ์: ' + VST.join(' / ') + ')', 'หมายเหตุ', 'ผู้ตรวจสอบ', 'วันที่ตรวจสอบ'];
+  const rows = F.filter(f => !+f.reported || !+f.reports || old.has(f.unit_code)).sort((a, b) => a.district_name.localeCompare(b.district_name, 'th') || +a.reported - +b.reported)
+    .map(f => { const v = old.get(f.unit_code) || {}; return [f.district_name, '="' + f.unit_code + '"', f.unit_name, f.dds_type || f.unit_type, !+f.reported ? 'ยังไม่พบการส่งรายงาน' : !+f.reports ? 'ส่งได้ แต่ไม่มีผู้ป่วยทั้งช่วง' : 'ส่งรายงานแล้ว', v.status || '', v.note || '', v.checked_by || '', v.checked_date || '']; });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + [head, ...rows].map(r => r.map(q).join(',')).join('\r\n')], { type: 'text/csv' })); a.download = 'แบบบันทึกผลตรวจสอบสถานพยาบาล.csv'; a.click();
 };
 </script>
 </body>

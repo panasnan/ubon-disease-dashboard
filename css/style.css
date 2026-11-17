@@ -276,3 +276,29 @@ details.more { margin-top: 12px; } details.more summary { cursor: pointer; font:
 .asof .partial { align-self: flex-end; display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(243,167,47,.18); color: #FFD996; font-size: 12px; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .dz-act a.btn { text-decoration: none; }
+
+/* ---- สถานพยาบาลแยกประเภท ---- */
+.vtypes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 12px; }
+.vt { background: #F6F9FE; border: 1px solid #E3E9F3; border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+.vt span { font-size: 13px; color: var(--muted); }
+.vt b { font-size: 24px; color: var(--navy, #10234A); line-height: 1.2; }
+.vt b small { font-size: 15px; font-weight: 500; color: var(--muted); }
+.vt em { font-style: normal; font-size: 12.5px; color: #16A477; }
+.vt.warn { background: #FFF6F6; border-color: #F6D3D4; }
+.vt.warn em { color: #E5484D; font-weight: 600; }
+.vscopes { display: grid; gap: 12px; margin: 6px 0 8px; }
+.vscope { border: 1px solid #E3E9F3; border-radius: 14px; padding: 12px 14px; background: #fff; }
+.vs-h { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+.vs-h b { display: block; color: var(--navy, #10234A); font-size: 16px; }
+.vs-h span { font-size: 12.5px; color: var(--muted); }
+.vs-p { font-size: 26px; font-weight: 700; text-align: right; line-height: 1.1; }
+.vs-p small { display: block; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.vs-p.green { color: #16A477; } .vs-p.orange { color: #D08612; } .vs-p.red { color: #E5484D; }
+.vscope .vtypes { margin: 0; }
+button.vt { font: inherit; text-align: left; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease, border-color .15s; }
+button.vt:hover, button.vt:focus-visible { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16,35,74,.10); border-color: #2671F2; outline: none; }
+.vt i { font-style: normal; font-size: 12px; color: #2671F2; margin-top: 2px; }
+#modal .box.wide { width: min(980px, 94vw); max-width: 980px; }
+#modal .box.wide .tbl .chip { white-space: nowrap; }
+#modal .box.wide .tbl-wrap { overflow-x: auto; }
+#modal .gsub { font-size: 15px; font-weight: 500; color: #BFD3F2; margin-left: 6px; }

@@ -84,11 +84,11 @@ export async function readWorkbook(file) {
   const dec = new TextDecoder();
   const shared = [];
   if (files['xl/sharedStrings.xml']) for (const m of dec.decode(files['xl/sharedStrings.xml']).matchAll(/<si>([\s\S]*?)<\/si>/g)) shared.push(unesc(Array.from(m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g), t => t[1]).join('')));
-  const rels = {}; for (const m of dec.decode(files['xl/_rels/workbook.xml.rels'] || new Uint8Array()).matchAll(/<Relationship\b[^>]*?Id="([^"]+)"[^>]*?Target="([^"]+)"/g)) rels[m[1]] = m[2].replace(/^\/?(xl\/)?/, 'xl/');
+  const rels = {}; for (const m of dec.decode(files['xl/_rels/workbook.xml.rels'] || new Uint8Array()).matchAll(/<Relationship\b[^>]*>/g)) { const id = /\bId="([^"]+)"/.exec(m[0])?.[1], tg = /\bTarget="([^"]+)"/.exec(m[0])?.[1]; if (id && tg) rels[id] = tg.replace(/^\/?(xl\/)?/, 'xl/'); } // attribute order differs between exporters
   const out = [];
-  for (const m of dec.decode(files['xl/workbook.xml'] || new Uint8Array()).matchAll(/<sheet\b[^>]*?name="([^"]+)"[^>]*?r:id="([^"]+)"/g)) {
-    const path = rels[m[2]]; if (!files[path]) continue;
-    out.push({ name: unesc(m[1]), rows: parseSheetRows(dec.decode(files[path]), shared) });
+  for (const t of dec.decode(files['xl/workbook.xml'] || new Uint8Array()).matchAll(/<sheet\b[^>]*>/g)) {
+    const name = /\bname="([^"]+)"/.exec(t[0])?.[1], path = rels[/\br:id="([^"]+)"/.exec(t[0])?.[1]]; if (!files[path]) continue;
+    out.push({ name: unesc(name || ''), rows: parseSheetRows(dec.decode(files[path]), shared) });
   }
   return out;
 }

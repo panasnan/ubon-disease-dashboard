@@ -403,6 +403,47 @@ function pageCluster() {
   ${cl.slice(0, 60).map(c => `<tr><td>${esc(dName(c.d))}</td><td>${esc(DB.districts.find(x => x.code === c.dc)?.name)}</td><td>${esc(c.sd)}</td><td class="r b">${c.cases}</td><td>${thDate(c.first)} – ${thDate(c.last + 6 * DAY)}</td><td>${c.mebs ? `<span class="chip green">${esc(c.mebs.event_id)}</span>` : '<span class="chip red">ยังไม่พบ — ควรตรวจสอบ</span>'}</td></tr>`).join('')}</tbody></table></div>${cl.length > 60 ? `<p class="note">แสดง 60 จาก ${cl.length} พื้นที่</p>` : ''}` : '<div class="empty">ไม่พบกลุ่มก้อนที่เข้าเกณฑ์</div>'}</div>`;
 }
 
+// ---------- ตรวจสอบการมีอยู่จริงของสถานพยาบาล (อำเภอยืนยัน) ----------
+// กลุ่มสถานพยาบาล: ใช้ประเภทจาก DDS แล้วแยก รพ.รัฐนอกสังกัด สป.สธ. และหน่วยของมหาวิทยาลัย/เทศบาลออกตามชื่อ
+const VGROUPS = ['โรงพยาบาลรัฐ (สังกัด สป.สธ.)', 'รพ.สต. สังกัด สธ.', 'สถานบริการสาธารณสุขชุมชน (สสช.)', 'ศูนย์สุขภาพชุมชน (ศสม./PCU)', 'รพ.สต. ถ่ายโอน อปท.', 'โรงพยาบาลรัฐ นอกสังกัด สป.สธ.', 'โรงพยาบาลเอกชน', 'หน่วยงานเฉพาะ/คลินิก/อื่น ๆ'];
+const VSHORT = { 'โรงพยาบาลรัฐ (สังกัด สป.สธ.)': 'รพ.รัฐ สป.สธ.', 'รพ.สต. สังกัด สธ.': 'รพ.สต. สธ.', 'สถานบริการสาธารณสุขชุมชน (สสช.)': 'สสช.', 'ศูนย์สุขภาพชุมชน (ศสม./PCU)': 'ศสม./PCU', 'รพ.สต. ถ่ายโอน อปท.': 'รพ.สต. อปท.', 'โรงพยาบาลรัฐ นอกสังกัด สป.สธ.': 'รพ.รัฐ นอก สป.สธ.', 'โรงพยาบาลเอกชน': 'รพ.เอกชน', 'หน่วยงานเฉพาะ/คลินิก/อื่น ๆ': 'เฉพาะ/อื่น ๆ' };
+const OUT_MOPH = /พระศรีมหาโพธิ์|มะเร็ง|ศูนย์อนามัย|กองบิน|ค่าย/; // นอก สป.สธ. 3 + นอก สธ. 2 (ตรงกับตารางสรุปประเภทของ DDC)
+const vgroup = f => f.dds_type === 'โรงพยาบาลรัฐ' ? (OUT_MOPH.test(f.unit_name) ? 'โรงพยาบาลรัฐ นอกสังกัด สป.สธ.' : 'โรงพยาบาลรัฐ (สังกัด สป.สธ.)')
+  : f.dds_type === 'ศูนย์สุขภาพชุมชน (ศสม./PCU)' && /วัดใต้|มหาวิทยาลัย/.test(f.unit_name) ? 'หน่วยงานเฉพาะ/คลินิก/อื่น ๆ' : f.dds_type;
+const SCOPES = [
+  { id: 'moph', name: 'หน่วยบริการในสังกัด สป.สธ.', sub: 'สสจ./สสอ. กำกับโดยตรง', g: VGROUPS.slice(0, 4) },
+  { id: 'lao', name: 'รพ.สต. ถ่ายโอน อปท.', sub: 'ติดตามร่วมกับ อปท./สสอ.', g: VGROUPS.slice(4, 5) },
+  { id: 'out', name: 'นอกสังกัด สป.สธ. / เอกชน / อื่น ๆ', sub: 'ประสานขอความร่วมมือ', g: VGROUPS.slice(5) }];
+const vExcluded = st => /ไม่ให้บริการ|ไม่มีอยู่|ปิดแล้ว/.test(st || '');
+const vMap = () => new Map((DB.facilityVerify || []).filter(v => v.unit_code).map(v => [String(v.unit_code).padStart(5, '0'), v]));
+function verifyCard(F) {
+  if (!F.length || !F.some(f => f.dds_type)) return '';
+  const V = vMap(), hasV = V.size > 0, flag = f => !+f.reported ? 'no' : !+f.reports ? 'zero' : '';
+  const ds = DB.districts.filter(d => S.dc === 'ALL' || d.code === S.dc).map(d => {
+    const fs = F.filter(f => f.district_code === d.code), g = {};
+    VGROUPS.forEach(t => { const x = fs.filter(f => vgroup(f) === t); g[t] = { n: x.length, r: x.filter(f => +f.reported).length }; });
+    return { d, g, n: fs.length, r: fs.filter(f => +f.reported).length, no: fs.filter(f => flag(f) === 'no').length, zero: fs.filter(f => flag(f) === 'zero').length };
+  }).filter(o => o.n);
+  const cell = v => !v.n ? '<td class="r muted">–</td>' : `<td class="r ${v.r < v.n ? 'red b' : ''}">${v.r}/${v.n}</td>`;
+  const list = F.filter(flag).sort((a, b) => a.district_name.localeCompare(b.district_name, 'th') || (+a.reported - +b.reported) || VGROUPS.indexOf(vgroup(a)) - VGROUPS.indexOf(vgroup(b)));
+  const vchip = v => !v?.status ? '<span class="muted">–</span>' : `<span class="chip ${vExcluded(v.status) ? 'green' : /แม่ข่าย/.test(v.status) ? 'yellow' : 'orange'}">${esc(v.status)}</span>`;
+  const one = S.dc !== 'ALL' && ds[0];
+  // สรุปตามประเภท (อำเภอที่เลือก หรือทั้งจังหวัด)
+  const tot = VGROUPS.map(t => ({ t, ...ds.reduce((a, o) => ({ n: a.n + o.g[t].n, r: a.r + o.g[t].r }), { n: 0, r: 0 }) })).filter(x => x.n);
+  return `<div class="card" id="verify"><div class="card-h"><h2>สถานพยาบาลในทะเบียน DDS แยกประเภท ${esc(one ? '— อ.' + one.d.name : '')}</h2><span class="src">ข้อมูลเพื่อทราบ</span></div>
+  <p class="note">ความครอบคลุมคิดจากทุกหน่วยที่อยู่ในทะเบียน DDS ของกรมควบคุมโรค (ทั้งจังหวัด ${fmt(DB.facilities.length)} แห่ง) — หากพบหน่วยที่ปิดแล้ว ไม่มีอยู่จริง หรือไม่ได้ตรวจรักษาผู้ป่วย โปรดแจ้งกลุ่มงานควบคุมโรคติดต่อ สสจ.อุบลราชธานี</p>
+  <div class="vscopes">${SCOPES.map(sc => { const xs = tot.filter(x => sc.g.includes(x.t)); if (!xs.length) return ''; const n = xs.reduce((a, x) => a + x.n, 0), r = xs.reduce((a, x) => a + x.r, 0), pc = r / n * 100;
+    return `<div class="vscope"><div class="vs-h"><div><b>${esc(sc.name)}</b><span>${esc(sc.sub)}</span></div><div class="vs-p ${pc >= 100 ? 'green' : pc >= 80 ? 'orange' : 'red'}">${fmt(pc, 1)}%<small>${r}/${n} แห่ง</small></div></div>
+    <div class="vtypes">${xs.map(x => `<button class="vt ${x.r < x.n ? 'warn' : ''}" data-vgroup="${esc(x.t)}" title="คลิกเพื่อดูรายชื่อ"><span>${esc(VSHORT[x.t])}</span><b>${x.r}<small>/${x.n}</small></b><em>${x.r < x.n ? `ยังไม่ส่ง ${x.n - x.r} แห่ง` : 'ส่งครบ'}</em><i>ดูรายชื่อ ›</i></button>`).join('')}</div></div>`; }).join('')}</div>
+  <p class="note">คลิกกล่องเพื่อดูรายชื่อสถานพยาบาล • รวม รพ.สต. (สธ. + อปท.) ${(() => { const x = tot.filter(t => /รพ\.สต\./.test(t.t)); const n = x.reduce((a, t) => a + t.n, 0), r = x.reduce((a, t) => a + t.r, 0); return n ? `${r}/${n} แห่ง (${fmt(r / n * 100, 1)}%)` : '–'; })()} • ตัวหารทางการยังเป็น ${fmt(ds.reduce((a, o) => a + o.n, 0))} แห่งตามทะเบียน DDS</p>
+  ${!one ? `<details class="more"><summary>ดูรายอำเภอแยกประเภท (25 อำเภอ)</summary><div class="tbl-wrap"><table class="tbl"><thead><tr><th>อำเภอ</th>${VGROUPS.map(t => `<th class="r" title="${esc(t)}">${esc(VSHORT[t])}</th>`).join('')}<th class="r">รวม</th><th class="r">ยังไม่ส่ง</th><th class="r">ไม่มีผู้ป่วยทั้งช่วง</th></tr></thead><tbody>
+  ${ds.map(o => `<tr><td><a href="#" class="pick-dc" data-dc="${o.d.code}">${esc(o.d.name)}</a></td>${VGROUPS.map(t => cell(o.g[t])).join('')}<td class="r b">${o.r}/${o.n}</td><td class="r ${o.no ? 'red b' : 'muted'}">${o.no || '–'}</td><td class="r ${o.zero ? '' : 'muted'}">${o.zero || '–'}</td></tr>`).join('')}
+  </tbody></table></div><p class="note">ตัวเลข = ส่งรายงานแล้ว / ทั้งหมด (แห่ง) • สีแดง = มีหน่วยที่ยังไม่ส่ง • คลิกชื่ออำเภอเพื่อดูรายชื่อหน่วย</p></details>` : ''}
+  ${list.length ? `<details class="more" ${one ? 'open' : ''}><summary>รายชื่อหน่วยที่ยังไม่ส่ง หรือไม่มีผู้ป่วยทั้งช่วง (${list.length} แห่ง)</summary><div class="tbl-wrap"><table class="tbl"><thead><tr>${one ? '' : '<th>อำเภอ</th>'}<th>สถานพยาบาล</th><th>ประเภท</th><th>สถานะในระบบ DDS</th>${hasV ? '<th>ผลตรวจสอบ (สสจ.)</th>' : ''}</tr></thead><tbody>
+  ${list.map(f => { const v = V.get(f.unit_code); return `<tr>${one ? '' : `<td>${esc(f.district_name)}</td>`}<td><a href="#" data-fac="${esc(f.unit_code)}">${esc(f.unit_name)}</a><div class="en">${esc(f.unit_code)}</div></td><td>${esc(VSHORT[vgroup(f)] || f.dds_type || f.unit_type)}</td><td>${flag(f) === 'no' ? '<span class="chip red">ยังไม่พบการส่งรายงาน</span>' : '<span class="chip few">ส่งได้ แต่ไม่มีผู้ป่วยทั้งช่วง</span>'}</td>${hasV ? `<td>${vchip(v)}${v?.note ? `<div class="en">${esc(v.note)}</div>` : ''}</td>` : ''}</tr>`; }).join('')}</tbody></table></div>
+  <p class="note">"ส่งได้ แต่ไม่มีผู้ป่วยทั้งช่วง" อาจเป็นหน่วยที่ส่งต่อผู้ป่วยให้ รพ. หรือ รพ.บันทึกแทน — ไม่ถือว่าผิด แต่ควรทราบไว้</p></details>` : '<p class="note">ทุกหน่วยส่งรายงานและมีข้อมูลผู้ป่วย ✓</p>'}</div>`;
+}
+
 function pageUnits() {
   const K = DB.config.dds_kpi || { coverage_target: 100, timely_target: 80, pending_max: 1, zero_report_target: 60 };
   const F = DB.facilities.filter(f => S.dc === 'ALL' || f.district_code === S.dc).map(f => ({ ...f, reported: +f.reported, total: +f.total, timely: +f.timely, reports: +f.reports }));
@@ -428,13 +469,14 @@ function pageUnits() {
   const laoCheck = laoType && S.dc === 'ALL' ? (+laoType.total === laoTot.n && +laoType.reported === laoTot.r ? `<span class="chip green">ตรงกับ DDC Dashboard ${laoType.reported}/${laoType.total} แห่ง</span>` : `<span class="chip orange">DDC Dashboard ${laoType.reported}/${laoType.total} แห่ง ไม่ตรงกับผลรวมรายอำเภอ ${laoTot.r}/${laoTot.n}</span>`) : '';
   const kcard = (n, title, val, sub, lv, target) => `<div class="kpi step lv-${lv}"><div class="step-n">${n}</div><div class="k-t">${title}</div><div class="k-v ${lv === 'green' ? 'green' : lv === 'red' ? 'red' : lv === 'none' ? 'navy sm' : 'orange'}">${val}</div><div class="k-s">${sub}</div><div class="k-s"><b>เกณฑ์:</b> ${target}</div></div>`;
   const selF = S.fac ? DB.facilities.find(f => f.unit_code === S.fac) : null;
-  const selStrip = selF ? (() => { const f = { ...selF, reported: +selF.reported, reports: +selF.reports, timely: +selF.timely }; const [lv, tx] = fStat(f); return `<div class="card sel-fac"><div class="card-h"><h2>${esc(f.unit_name)} <span class="muted">${esc(f.unit_code)} • ${esc(f.dds_type || f.unit_type)} • ${esc(f.district_name)}</span></h2><span class="chip ${lv}">${tx}</span></div>
+  const selStrip = selF ? (() => { const f = { ...selF, reported: +selF.reported, reports: +selF.reports, timely: +selF.timely }; const [lv, tx] = fStat(f); return `<div class="card sel-fac"><div class="card-h"><h2>${esc(f.unit_name)} <span class="muted">${esc(f.unit_code)} • ${esc(f.dds_type || f.unit_type)} • ${esc(f.district_name)}${vMap().get(f.unit_code)?.status ? ' • อำเภอยืนยัน: ' + esc(vMap().get(f.unit_code).status) : ''}</span></h2><span class="chip ${lv}">${tx}</span></div>
     <div class="ev-grid"><div><span class="muted">ส่งรายงาน</span><b>${f.reported ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</b></div><div><span class="muted">ทันเวลา (7 วัน)</span><b>${f.reports ? fmt(f.timely / f.reports * 100, 1) + '%' : '–'}</b> <small class="muted">${fmt(f.timely)} / ${fmt(f.reports)} รายงาน</small></div></div></div>`; })() : '';
   return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>คุณภาพการรายงานในระบบ DDS</h1><div class="sub">${esc(distName(S.dc))} • ${esc(per || 'ความครอบคลุมและความทันเวลา')}</div></div></header>
   ${!F.length ? `<div class="notice">${ico('alert', 18)}<div><b>ยังไม่มีข้อมูลรายสถานพยาบาล</b> — Export ตารางจาก DDC Dashboard (หน้า 1 ความครอบคลุมและความทันเวลา) แล้วอัปเดตที่ศูนย์อัปเดตข้อมูล</div></div>` : ''}
   ${selStrip}
   <section class="kpis">
-    ${kcard(1, 'ความครอบคลุมการส่งรายงาน', cov == null ? '–' : fmt(cov, 2) + '%', `${fmt(sum(F, 'reported'))} / ${fmt(sum(F, 'total'))} แห่ง`, lvCov(cov), `ครอบคลุมตามที่กำหนด (ตั้งไว้ ${K.coverage_target}%)`)}
+    ${(() => { const V = vMap(), ex = F.filter(f => vExcluded(V.get(f.unit_code)?.status)), rN = sum(F, 'reported') - sum(ex, 'reported'), tN = sum(F, 'total') - sum(ex, 'total');
+      return kcard(1, 'ความครอบคลุมการส่งรายงาน', cov == null ? '–' : fmt(cov, 2) + '%', `ทางการ (DDC) ${fmt(sum(F, 'reported'))} / ${fmt(sum(F, 'total'))} แห่ง${ex.length ? `<br><b>ปรับตามผลตรวจสอบ ${fmt(rN / tN * 100, 2)}%</b> (${fmt(rN)} / ${fmt(tN)} • ตัดหน่วยที่ไม่มีอยู่จริง/ไม่ให้บริการ ${ex.length} แห่ง)` : ''}`, lvCov(cov), `ครอบคลุมตามที่กำหนด (ตั้งไว้ ${K.coverage_target}%)`); })()}
     ${kcard(1, 'ความทันเวลา (ภายใน 7 วัน)', tim == null ? '–' : fmt(tim, 2) + '%', `${fmt(sum(F, 'timely'))} / ${fmt(sum(F, 'reports'))} รายงาน`, lvTim(tim), `มากกว่าร้อยละ ${K.timely_target}`)}
     ${laoTot.n ? kcard(1, 'ความครอบคลุม อปท. (ศบส. อปท.)', fmt(laoTot.r / laoTot.n * 100, 2) + '%', `${laoTot.r} / ${laoTot.n} แห่ง`, lvCov(laoTot.r / laoTot.n * 100), `ครอบคลุมตามที่กำหนด (ตั้งไว้ ${K.coverage_target}%)`) : ''}
     ${kcard(2, 'ข้อมูลรอแก้ไข/ปรับปรุง', pend == null ? '–' : fmt(pend, 2) + '%', st ? `${fmt(+st.pending)} รายงาน จาก ${fmt(+st.approved + +st.pending)} (${esc(st.period_label)})` : 'ได้จากการแปลงไฟล์ DDS รายเคส', pend == null ? 'none' : pend < K.pending_max ? 'green' : 'red', `น้อยกว่าร้อยละ ${K.pending_max}`)}
@@ -451,11 +493,12 @@ function pageUnits() {
   <p class="note">ครอบคลุม = สถานพยาบาลที่ส่งรายงาน ÷ ทั้งหมด • ทันเวลา = รายงานที่ส่งภายใน 7 วัน ÷ รายงานทั้งหมด (เกณฑ์ > ${K.timely_target}%) • อปท.: จำนวนแห่งจากชีต "ผลงาน DDS อปท." ${laoCheck}
   ${laoTagged ? '' : '<br>ความทันเวลาของ อปท. รายอำเภอจะแสดงเมื่อ Export ตารางรายสถานพยาบาลที่กรอง "ศูนย์บริการสาธารณสุข อปท." แล้วอัปเดตที่ศูนย์อัปเดตข้อมูล ข้อ 4'}
   ${DB.ddsDistrict.length && DB.ddsDistrict.every(x => x.lao_pct === '') ? '<br>ร้อยละ "ผลการดำเนินงาน" ในชีต อปท. ไม่นำมาใช้ เพราะค่าถูกคัดลอกมาจากชีตใน/นอกสังกัด — แดชบอร์ดคำนวณใหม่จากจำนวนแห่ง' : ''}</p></div>
+  ${verifyCard(F)}
   ${F.length ? `<div class="card"><div class="card-h"><h2>สถานพยาบาลที่ไม่ส่งรายงาน / ต้องเร่งรัด / ติดตาม</h2><span class="muted">เร่งรัด = ทันเวลา < ${K.timely_target}% • ติดตาม = ${K.timely_target}–90% • ผ่าน ≥ 90%</span></div>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>สถานพยาบาล</th><th>ประเภท</th><th>อำเภอ</th><th class="r">รายงาน</th><th class="r">ทันเวลา</th><th class="r">%</th><th>สถานะ</th></tr></thead><tbody>
-  ${sorted.filter(f => ['red', 'orange'].includes(fStat(f)[0])).map(f => { const [lv, tx] = fStat(f); return `<tr class="${f.unit_code === S.fac ? 'sel' : ''}"><td class="b"><a href="#" data-fac="${esc(f.unit_code)}">${esc(f.unit_name)}</a><div class="en">${esc(f.unit_code)}</div></td><td>${esc(f.unit_type)}</td><td>${esc(f.district_name)}</td><td class="r">${fmt(f.reports)}</td><td class="r">${fmt(f.timely)}</td><td class="r">${f.reports ? fmt(f.timely / f.reports * 100, 1) : '–'}</td><td><span class="chip ${lv}">${tx}</span></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty ok">ไม่มีสถานพยาบาลที่ต้องเร่งรัด/ติดตาม ✓</td></tr>'}</tbody></table></div>
+  ${sorted.filter(f => ['red', 'orange'].includes(fStat(f)[0])).map(f => { const [lv, tx] = fStat(f); return `<tr class="${f.unit_code === S.fac ? 'sel' : ''}"><td class="b"><a href="#" data-fac="${esc(f.unit_code)}">${esc(f.unit_name)}</a><div class="en">${esc(f.unit_code)}</div></td><td>${esc(VSHORT[vgroup(f)] || f.unit_type)}</td><td>${esc(f.district_name)}</td><td class="r">${fmt(f.reports)}</td><td class="r">${fmt(f.timely)}</td><td class="r">${f.reports ? fmt(f.timely / f.reports * 100, 1) : '–'}</td><td><span class="chip ${lv}">${tx}</span></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty ok">ไม่มีสถานพยาบาลที่ต้องเร่งรัด/ติดตาม ✓</td></tr>'}</tbody></table></div>
   <details class="more"><summary>แสดงสถานพยาบาลที่ผ่านเกณฑ์ / ส่ง zero report (${sorted.filter(f => !['red', 'orange'].includes(fStat(f)[0])).length} แห่ง)</summary><div class="tbl-wrap"><table class="tbl"><tbody>
-  ${sorted.filter(f => !['red', 'orange'].includes(fStat(f)[0])).map(f => { const [lv, tx] = fStat(f); return `<tr><td>${esc(f.unit_name)} <span class="en">${esc(f.unit_code)}</span></td><td>${esc(f.unit_type)}</td><td>${esc(f.district_name)}</td><td class="r">${fmt(f.reports)}</td><td class="r">${f.reports ? fmt(f.timely / f.reports * 100, 1) + '%' : '–'}</td><td><span class="chip ${lv}">${tx}</span></td></tr>`; }).join('')}</tbody></table></div></details></div>` : ''}`;
+  ${sorted.filter(f => !['red', 'orange'].includes(fStat(f)[0])).map(f => { const [lv, tx] = fStat(f); return `<tr><td>${esc(f.unit_name)} <span class="en">${esc(f.unit_code)}</span></td><td>${esc(VSHORT[vgroup(f)] || f.unit_type)}</td><td>${esc(f.district_name)}</td><td class="r">${fmt(f.reports)}</td><td class="r">${f.reports ? fmt(f.timely / f.reports * 100, 1) + '%' : '–'}</td><td><span class="chip ${lv}">${tx}</span></td></tr>`; }).join('')}</tbody></table></div></details></div>` : ''}`;
 }
 
 function pageQuality() {
@@ -664,6 +707,17 @@ function openFac(code) {
   </div></div>`;
   $('#modal').hidden = false; $('#qres').hidden = true; setTimeout(() => $('#modal .box')?.focus(), 0);
 }
+function openGroup(t) {
+  const F = (DB.facilities || []).filter(f => vgroup(f) === t && (S.dc === 'ALL' || f.district_code === S.dc))
+    .sort((a, b) => { const k = f => !+f.reported ? 0 : !+f.reports ? 1 : 2; return k(a) - k(b) || a.district_name.localeCompare(b.district_name, 'th') || a.unit_name.localeCompare(b.unit_name, 'th'); });
+  const r = F.filter(f => +f.reported).length, V = vMap();
+  const st = f => !+f.reported ? '<span class="chip red">ยังไม่พบการส่งรายงาน</span>' : !+f.reports ? '<span class="chip few">ส่งได้ แต่ไม่มีผู้ป่วยทั้งช่วง</span>' : `<span class="chip green">ส่งแล้ว ${fmt(+f.reports)} รายงาน</span>`;
+  $('#modal').innerHTML = `<div class="box wide" tabindex="-1" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="box-h"><div><div class="eyebrow">สถานพยาบาลในทะเบียน DDS • ${esc(S.dc === 'ALL' ? 'ทั้งจังหวัด' : 'อำเภอ' + distName(S.dc))}</div><h2>${esc(t)} <small class="gsub">ส่งแล้ว ${r}/${F.length} แห่ง</small></h2></div><button id="mclose" aria-label="ปิด">${ico('close', 18)}</button></div>
+  <div class="box-b"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th>${S.dc === 'ALL' ? '<th>อำเภอ</th>' : ''}<th>สถานพยาบาล</th><th>สถานะในระบบ DDS</th>${V.size ? '<th>ผลตรวจสอบ (สสจ.)</th>' : ''}</tr></thead><tbody>
+  ${F.map((f, i) => `<tr><td class="muted">${i + 1}</td>${S.dc === 'ALL' ? `<td>${esc(f.district_name)}</td>` : ''}<td><a href="#" data-fac="${esc(f.unit_code)}">${esc(f.unit_name)}</a><div class="en">${esc(f.unit_code)}</div></td><td>${st(f)}</td>${V.size ? `<td>${esc(V.get(f.unit_code)?.status || '–')}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+  <p class="note">คลิกชื่อสถานพยาบาลเพื่อดูผลการรายงานรายหน่วย</p><div class="dl"><button class="btn" id="mclose2">ปิด</button></div></div></div>`;
+  $('#modal').hidden = false; setTimeout(() => $('#modal .box')?.focus(), 0);
+}
 function closeModal() { $('#modal').hidden = true; }
 
 // ---------- render & events ----------
@@ -698,6 +752,7 @@ function bind() {
   document.addEventListener('focusin', e => { if (e.target.id === 'q' && e.target.value) showResults(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); $('#qres').hidden = true; } if (e.key === 'Enter' && e.target.id === 'q') { e.preventDefault(); const r = searchFac(e.target.value); if (r[0]) selectFac(r[0].code); } });
   document.addEventListener('click', e => {
+    const vg = e.target.closest('[data-vgroup]'); if (vg) { e.preventDefault(); return openGroup(vg.dataset.vgroup); }
     const fb = e.target.closest('[data-fac]'); if (fb) { e.preventDefault(); e.stopImmediatePropagation(); selectFac(fb.dataset.fac); return; }
     if (e.target.closest('#facx')) { e.stopImmediatePropagation(); S.fac = ''; render(); return; }
     if (e.target.closest('#mclose2')) { e.stopImmediatePropagation(); closeModal(); return; }
