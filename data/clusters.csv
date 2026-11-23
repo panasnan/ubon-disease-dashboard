@@ -1,0 +1,7 @@
+﻿year_be,disease_id,district_code,subdistrict_code,week_from,week_to,cases
+2569,foodpoison,3409,340904,46,46,5
+2569,hfmd,3401,340116,45,46,5
+2569,mushroom,3401,,46,46,2
+2569,melioid,3420,,43,46,2
+2569,lepto,3425,,43,46,2
+2569,lepto,3414,,43,46,2
