@@ -337,3 +337,18 @@ details.more { margin-top:10px } details.more summary { cursor:pointer; color:#1
 .tpl { text-align:left; padding:9px 12px; border-radius:10px; border:1px solid #D6E0EE; background:#fff; font:600 14px var(--f-head); color:#10234A; cursor:pointer }
 .tpl.on { background:#174EA6; color:#fff; border-color:#174EA6 }
 .levels.four .lv-grid { grid-template-columns:repeat(4,1fr) } .lv-card.c4 { border-top-color:#F08A24 }
+/* spacing */
+.levels { margin: 18px 0 20px } .lv-head { margin: 0 0 10px; line-height: 1.6 }
+.lv-card { padding: 18px 20px 16px } .lv-card .lv-t { gap: 2px; line-height: 1.35 } .lv-card .lv-v { margin: 10px 0 4px; line-height: 1.1 }
+.lv-card .lv-s { line-height: 1.5 } .lv-card .lv-r { margin-top: 10px; line-height: 1.6 }
+.kpi .k-t { line-height: 1.4 } .kpi .k-s { line-height: 1.6; margin-top: 4px }
+.dz-head { margin-top: 22px !important }
+/* info toolbar */
+.info-bar { display:flex; flex-direction:column; gap:12px; margin-top:16px }
+.info-bar .tpls { flex-direction:row; flex-wrap:wrap; margin:0 }
+.info-opts { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end }
+.info-opts label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted) }
+.info-opts select { padding:8px 10px; border-radius:10px; border:1px solid var(--line); font:500 14px var(--f-head); min-width:170px }
+.info-btns { display:flex; gap:8px; margin-left:auto }
+.info-prev { margin-top:14px } .info-prev canvas { max-width: 1100px }
+.kpi .k-v.sm { border:0 !important; background:none !important; box-shadow:none !important; padding:4px 0 !important }

@@ -58,8 +58,9 @@ function drawLevels(f, m) {
     c.fillStyle = '#5B6B86'; c.font = F('400', 21 * fs + (land ? 0 : 5), 'Sarabun'); if (pop) c.fillText(`${fmt(o.cum / pop * 1e5, 1)} ต่อแสน ปชก.`, x + 24, top + (land ? 156 : 142));
     const r = o.med >= 3 ? o.rec / o.med : null; pill(c, x + 24, top + bh - 22, r == null ? 'ผู้ป่วยน้อย' : `${fmt(r, 2)} เท่าของมัธยฐาน`, RLV(r), '#fff', land ? 20 : 15);
   });
-  // table by disease
   const ty = top + bh + 28, th = bottom - ty; card(c, 56, ty, W - 112, th);
+  if (m.dist && m.diseaseName !== 'รวม 10 โรค') return levelsDistricts(c, m, 56, ty, W - 112, th, land, T);
+  // table by disease
   const rows = L.rows, rh = (th - 90) / rows.length, cx = land ? [96, 700, 1060, 1420] : [80, 590, 780, 960];
   c.font = F('700', land ? 22 : 19); c.fillStyle = '#5B6B86'; c.fillText(land ? `โรค — อัตราส่วนต่อมัธยฐาน 5 ปี (สัปดาห์ที่ ${L.w0}–${L.W})` : `โรค (× มัธยฐาน, สัปดาห์ที่ ${L.w0}–${L.W})`, cx[0], ty + 50);
   ['ประเทศ', 'เขต 10', 'อุบลฯ'].forEach((t, i) => { c.textAlign = 'center'; c.fillText(t, cx[i + 1], ty + 50); }); c.textAlign = 'left';
@@ -72,6 +73,20 @@ function drawLevels(f, m) {
       c.fillStyle = v == null ? '#5B6B86' : '#fff'; c.textAlign = 'center'; c.fillText(t, cx[j + 1], y + rh / 2 + 7); c.textAlign = 'left'; });
   });
   if (land && L.local.length) { c.fillStyle = '#D93025'; c.font = F('700', 22); c.fillText('สัญญาณเฉพาะพื้นที่:', 1560, ty + 110); c.fillStyle = '#10234A'; c.font = F('400', 22, 'Sarabun'); L.local.slice(0, 6).forEach((t, i) => c.fillText('• ' + t, 1560, ty + 150 + i * 36)); c.fillStyle = '#5B6B86'; c.font = F('400', 17, 'Sarabun'); c.fillText('อุบลฯ สูงกว่าแนวโน้มประเทศ', 1560, ty + 150 + Math.min(6, L.local.length) * 36 + 8); }
+}
+
+// เลือกโรคเดียว: ต่อจากประเทศ → เขต → จังหวัด ด้วย 25 อำเภอของอุบลฯ (อัตราป่วย 4 สัปดาห์ เทียบจังหวัด)
+function levelsDistricts(c, m, x, y, w, h, land, T) {
+  const D = m.dist, rows = [...D.rows].sort((a, b) => b.rt - a.rt), pr = D.provRate || 0;
+  c.fillStyle = '#10234A'; c.font = F('700', land ? 26 : 22); c.fillText(`อุบลราชธานี รายอำเภอ • อัตราป่วย ${D.Wn} สัปดาห์ล่าสุด (สัปดาห์ที่ ${D.w0}–${D.wL})`, x + 28, y + 46);
+  c.fillStyle = '#5B6B86'; c.font = F('400', land ? 18 : 15, 'Sarabun'); c.fillText(`ต่อแสนประชากร • เส้นประ = ทั้งจังหวัด ${fmt(pr, 1)} ต่อแสน • สีส้ม/แดง = สูงกว่าจังหวัด 1.5 เท่าขึ้นไป`, x + 28, y + 74);
+  const cols = land ? 2 : 1, per = Math.ceil(rows.length / cols), rh = (h - 104) / per, cw = (w - 40) / cols, mx = Math.max(1e-9, ...rows.map(r => r.rt), pr);
+  rows.forEach((r, i) => { const col = Math.floor(i / per), xx = x + 28 + col * cw, yy = y + 92 + (i % per) * rh, mid = yy + rh / 2 + 6;
+    c.fillStyle = '#10234A'; c.font = F('600', land ? 18 : 15); c.fillText(`${i + 1}. ${r.name}`, xx, mid);
+    const bx = xx + (land ? 220 : 190), bw = cw - (land ? 400 : 300), bhh = Math.min(16, rh - 6);
+    c.fillStyle = r.st >= 2 ? ST[r.st].c : r.st === 1 ? '#E0B030' : T.bar; c.globalAlpha = r.st ? 1 : 0.7; rr(c, bx, yy + rh / 2 - bhh / 2, Math.max(3, bw * r.rt / mx), bhh, bhh / 2); c.fill(); c.globalAlpha = 1;
+    const px = bx + bw * pr / mx; c.save(); c.strokeStyle = '#10234A'; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(px, yy + 2); c.lineTo(px, yy + rh - 2); c.stroke(); c.restore();
+    c.fillStyle = '#10234A'; c.font = F('700', land ? 17 : 14); c.fillText(fmt(r.rt, 1), bx + bw + 10, mid); c.fillStyle = '#5B6B86'; c.font = F('400', land ? 15 : 13, 'Sarabun'); c.fillText(`${fmt(r.rec)} ราย`, bx + bw + (land ? 70 : 60), mid); });
 }
 
 // ---------- 2) แผนที่ + สถานะรายอำเภอ ----------

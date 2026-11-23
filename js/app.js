@@ -273,7 +273,7 @@ function diseaseBlock(m, r, i, PV) {
     <div class="kpi"><div class="k-t">ผู้ป่วยใหม่ สัปดาห์ที่ ${m.week?.week ?? '–'}</div><div class="k-v navy">${nw.v == null ? '–' : (nw.v > 0 ? '+' : '') + fmt(nw.v)}</div><div class="k-s">${esc(nw.how)}</div></div>
     <div class="kpi"><div class="k-t">ผู้เสียชีวิต / CFR</div><div class="k-v ${r.deaths ? 'red' : 'green'}">${fmt(r.deaths)} <small>ราย</small></div><div class="k-s">CFR ${fmt(r.cfr, 2)}%${pv && pv.deaths != null ? ` • ${PV.year}: ${fmt(pv.deaths)} ราย (CFR ${fmt(pv.cfr, 2)}%)` : ''}${r.pending ? `<br><span class="chip orange">รอคีย์ใน DDS ${r.pending} ราย</span>` : ''}</div></div>
     <div class="kpi"><div class="k-t">อัตราป่วยต่อแสน ปชก.</div><div class="k-v navy">${r.rate == null ? '–' : fmt(r.rate, 2)}</div><div class="k-s">${prov ? `ทั้งจังหวัด ${prov.rate == null ? '–' : fmt(prov.rate, 2)} ต่อแสน` : rank ? `สูงเป็นอันดับ ${rank} จาก 10 โรค` : ''}</div></div>
-    <div class="kpi"><div class="k-t">สถานะ (${A.window_weeks} สัปดาห์ล่าสุด)</div><div class="k-v sm">${chip(r.level)}</div><div class="k-s">${fmt(r.recent ?? 0)} ราย${r.base != null ? ` เทียบมัธยฐาน ${fmt(r.base)} ราย${r.ratio != null && isFinite(r.ratio) ? ` = ${fmt(r.ratio, 1)} เท่า` : ''}` : ' • ยังไม่มีค่ามัธยฐาน 5 ปี'}<br><span class="muted">สัปดาห์ที่ ${m.week ? `${Math.max(1, m.week.week - A.window_weeks + 1)}–${m.week.week}` : '–'}</span></div></div>
+    <div class="kpi"><div class="k-t">สถานะ (${A.window_weeks} สัปดาห์ล่าสุด)</div><div class="k-v sm" style="color:${LEVEL_COLOR[r.level] || 'var(--navy)'}">${LEVEL_TEXT[r.level] || '–'}</div><div class="k-s">${fmt(r.recent ?? 0)} ราย${r.base != null ? ` เทียบมัธยฐาน ${fmt(r.base)} ราย${r.ratio != null && isFinite(r.ratio) ? ` = ${fmt(r.ratio, 1)} เท่า` : ''}` : ' • ยังไม่มีค่ามัธยฐาน 5 ปี'}<br><span class="muted">${m.hasDds ? (w => `สัปดาห์ที่ ${Math.max(1, w - A.window_weeks + 1)}–${w} (DDS)`)(epiWeek(m.alertT, S.y - 543).week) : ''}</span></div></div>
   </section>
   ${m.hasDds ? `<section class="grid2 even">
     <div class="card"><div class="card-h"><h2>ผู้ป่วยรายสัปดาห์ 12 สัปดาห์ล่าสุด</h2><span class="muted">ถึงสัปดาห์ที่ ${m.week.week} (สัปดาห์ที่ครบ)</span></div>${miniBars(ser, color)}
@@ -752,20 +752,20 @@ function infoModel(dc, d = S.d) {
 }
 
 function pageInfo() {
-  const needD = ['levels', 'district', 'weekly'].includes(S.tpl), needDc = S.tpl === 'situation';
-  return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สร้างภาพ Info</h1><div class="sub">เลือกรูปแบบ โรค อำเภอ สี และขนาด แล้วคัดลอกไปวางใน PowerPoint / LINE ได้ทันที</div></div></header>
-  <section class="info-wrap"><div class="card info-ctl">
-    <label>รูปแบบภาพ</label><div class="tpls">${Object.entries(TEMPLATES).map(([k, v]) => `<button class="tpl ${S.tpl === k ? 'on' : ''}" data-tpl="${k}">${esc(v)}</button>`).join('')}</div>
-    ${needD || needDc ? `<label>โรค</label><select id="fd2" aria-label="โรคในภาพ"><option value="ALL">รวม 10 โรค</option>${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>` : ''}
-    ${needDc ? `<label>พื้นที่</label><select id="fdc2"><option value="ALL">ทั้งจังหวัด</option>${DB.districts.map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>` : ''}
-    <label>โทนสี</label><select id="ithm">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${S.theme === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select>
-    <label>ขนาดภาพ</label><select id="isize">${Object.entries(SIZES).filter(([k]) => S.tpl === 'situation' || k !== 'a4').map(([k, v]) => `<option value="${k}" ${S.size === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
-    <button class="btn" id="copyimg">${ico('image', 16)} คัดลอกภาพ (วางด้วย Ctrl+V)</button>
-    <button class="btn ghost" id="dl">${ico('down', 16)} ดาวน์โหลด PNG</button>
-    ${needDc ? `<button class="btn ghost" id="dlall">${ico('down', 16)} ดาวน์โหลดครบ 25 อำเภอ + จังหวัด</button>` : ''}
-    <div id="dlmsg" class="muted"></div>
-    <p class="note">${S.tpl === 'situation' ? 'โทนสีใช้กับรูปแบบอื่น ๆ • ' : ''}ภาพใช้ข้อมูลรวมระดับอำเภอ/จังหวัดเท่านั้น ไม่มีข้อมูลระบุตัวบุคคล (PDPA)</p>
-  </div><div class="card info-prev"><canvas id="cv"></canvas></div></section>`;
+  const needD = ['levels', 'district', 'weekly', 'situation'].includes(S.tpl), needDc = S.tpl === 'situation';
+  return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สร้างภาพ Info</h1><div class="sub">เลือกรูปแบบ → ตั้งค่า → คัดลอกไปวางใน PowerPoint / LINE ได้ทันที</div></div></header>
+  <div class="card info-bar">
+    <div class="tpls">${Object.entries(TEMPLATES).map(([k, v]) => `<button class="tpl ${S.tpl === k ? 'on' : ''}" data-tpl="${k}">${esc(v)}</button>`).join('')}</div>
+    <div class="info-opts">
+      ${needD ? `<label>โรค<select id="fd2"><option value="ALL">รวม 10 โรค</option>${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
+      ${needDc ? `<label>พื้นที่<select id="fdc2"><option value="ALL">ทั้งจังหวัด</option>${DB.districts.map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
+      ${S.tpl !== 'situation' ? `<label>โทนสี<select id="ithm">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${S.theme === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>` : ''}
+      <label>ขนาด<select id="isize">${Object.entries(SIZES).filter(([k]) => S.tpl === 'situation' || k !== 'a4').map(([k, v]) => `<option value="${k}" ${S.size === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
+      <div class="info-btns"><button class="btn" id="copyimg">${ico('image', 16)} คัดลอกภาพ</button><button class="btn ghost" id="dl">${ico('down', 16)} PNG</button>${needDc ? `<button class="btn ghost" id="dlall">${ico('down', 16)} ครบ 25 อำเภอ</button>` : ''}</div>
+    </div><div id="dlmsg" class="muted"></div>
+  </div>
+  <div class="card info-prev"><canvas id="cv"></canvas></div>
+  <p class="note">ภาพใช้ข้อมูลรวมระดับอำเภอ/จังหวัดเท่านั้น ไม่มีข้อมูลระบุตัวบุคคล (PDPA)</p>`;
 }
 function info2Model() {
   const m = model('ALL'), d = S.d, dn = d === 'ALL' ? 'รวม 10 โรค' : dName(d);
