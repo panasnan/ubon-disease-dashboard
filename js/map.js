@@ -48,7 +48,7 @@ function geoMap(db, colorOf, labelOf, selected) {
 
 // map converted from UBON_Shape_MAP (pptx) → data/map_districts.json
 const centroidCache = new Map();
-function centroid(d) {
+export function centroid(d) {
   if (centroidCache.has(d)) return centroidCache.get(d);
   let best = null;
   for (const ring of d.split('Z')) {

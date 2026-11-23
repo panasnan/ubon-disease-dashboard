@@ -310,3 +310,30 @@ button.vt:hover, button.vt:focus-visible { transform: translateY(-2px); box-shad
 @media (max-width:1200px) { .dgrid { grid-template-columns:1fr } }
 .tam { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)) } .tam .tm span { white-space:nowrap }
 .dgrid .tbl th, .dgrid .tbl td { padding-left:6px; padding-right:6px; font-size:13.5px }
+.levels { margin: 0 0 18px }
+.lv-head { margin: 0 0 8px; font-size: 15px }
+.lv-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px }
+.lv-card { background:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 2px 10px rgba(16,35,74,.06); border-top:5px solid #8DB2EA; position:relative }
+.lv-card.c2 { border-top-color:#4F86DB } .lv-card.c3 { border-top-color:#174EA6; background:linear-gradient(180deg,#F3F7FE,#fff) }
+.lv-card .lv-t { font:700 17px var(--f-head); color:#10234A; display:flex; flex-direction:column } .lv-card .lv-t small { font:400 12.5px var(--f-body,inherit); color:#6B7A90 }
+.lv-card .lv-v { font:700 34px var(--f-head); color:#174EA6; margin:6px 0 2px } .lv-card .lv-v small { font-size:15px; color:#6B7A90 }
+.lv-card .lv-s { color:#5B6B86; font-size:14px } .lv-card .lv-r { margin-top:8px; font-size:13px; color:#5B6B86 }
+.lv-card + .lv-card::before { content:'›'; position:absolute; left:-12px; top:42%; color:#9BB0CF; font-size:22px }
+.kpis.k4 { grid-template-columns:repeat(4,1fr) }
+@media (max-width:900px) { .lv-grid, .kpis.k4 { grid-template-columns:1fr } }
+.tbl th small { display:block; font-weight:400; font-size:11px; color:#6B7A90 }
+.dchips { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px }
+.dchip { padding:6px 14px; border-radius:999px; background:#fff; border:1px solid #D6E0EE; color:#10234A; text-decoration:none; font:600 14px var(--f-head) }
+.dchip.on { background:#174EA6; color:#fff; border-color:#174EA6 } .dchip:hover { border-color:#174EA6 }
+.card.hl { background:#F3F7FE; border-left:4px solid #174EA6; padding:12px 16px; font-size:14.5px }
+.dtbl td { vertical-align:middle } .wbars { display:block }
+details.more { margin-top:10px } details.more summary { cursor:pointer; color:#174EA6; font-size:14px; margin:6px 0 }
+.smult { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px }
+.sm { display:block; text-decoration:none; color:inherit; border:1px solid #E3E9F3; border-radius:12px; padding:10px 10px 8px; background:#fff }
+.sm:hover { border-color:#174EA6 } .sm.st2, .sm.st3 { border-color:#F3B27A; background:#FFF9F3 } .sm.st1 { background:#FFFCF0 }
+.sm-h { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; font-size:14px } .sm-h .chip { font-size:10.5px; padding:1px 7px }
+.sm-f { display:flex; justify-content:space-between; font-size:12px; color:#6B7A90; margin-top:4px } .sm-f b { color:#10234A }
+.tpls { display:flex; flex-direction:column; gap:6px; margin-bottom:6px }
+.tpl { text-align:left; padding:9px 12px; border-radius:10px; border:1px solid #D6E0EE; background:#fff; font:600 14px var(--f-head); color:#10234A; cursor:pointer }
+.tpl.on { background:#174EA6; color:#fff; border-color:#174EA6 }
+.levels.four .lv-grid { grid-template-columns:repeat(4,1fr) } .lv-card.c4 { border-top-color:#F08A24 }
