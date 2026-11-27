@@ -59,10 +59,10 @@ async function drawLandscape(canvas, m) {
     c.fillStyle = '#5B6B86'; c.font = F('400', 22, 'Sarabun'); c.textAlign = 'right'; c.fillText(k.s, lx + lw - 28, y + 112); c.textAlign = 'left';
   });
   const sy = 222 + 3 * 166, sh = 990 - sy; card(c, lx, sy, lw, sh);
-  c.fillStyle = '#174EA6'; c.font = F('700', 26); c.fillText('สรุปสถานการณ์', lx + 30, sy + 44);
-  c.fillStyle = '#10234A'; c.font = F('400', 21, 'Sarabun');
-  let ln = 0; const maxL = Math.floor((sh - 66) / 30);
-  for (const p of m.summary) { if (ln >= maxL) break; ln += wrap(c, '• ' + p, lx + 30, sy + 82 + ln * 30, lw - 60, 30, maxL - ln); }
+  c.fillStyle = '#174EA6'; c.font = F('700', 26); c.fillText((m.boxTitle || 'สรุปสถานการณ์'), lx + 30, sy + 44);
+  c.fillStyle = '#10234A'; c.font = F('400', 19, 'Sarabun');
+  let ln = 0; const maxL = Math.floor((sh - 62) / 27);
+  for (const p of m.summary) { if (ln >= maxL) break; ln += wrap(c, '• ' + p, lx + 30, sy + 78 + ln * 27, lw - 60, 27, maxL - ln); }
 
   // right: table
   const rx = 740, rw = 1120, ty = 222, th = 768; card(c, rx, ty, rw, th);
@@ -101,8 +101,10 @@ function drawCompareTable(c, m, rx, ty, rw, th) {
   c.fillStyle = '#E3E9F3'; rr(c, g1[0], ty + 14, g1[1] - g1[0], 44, 10); c.fill();
   c.fillStyle = '#174EA6'; rr(c, g2[0], ty + 14, g2[1] - g2[0], 44, 10); c.fill();
   c.textAlign = 'center'; c.font = F('700', 20);
-  c.fillStyle = '#10234A'; c.fillText(P.label.replace(/\s+/g, ' '), (g1[0] + g1[1]) / 2, ty + 43);
-  c.fillStyle = '#fff'; c.fillText(m.curLabel, (g2[0] + g2[1]) / 2, ty + 43);
+  const fit = (t, w, sz) => { let z = sz; c.font = F('700', z); while (z > 13 && c.measureText(t).width > w - 24) { z--; c.font = F('700', z); } return t; };
+  const pl = P.label.replace(/\s+/g, ' ').replace(/,?\s*แดชบอร์ดกองระบาด(วิทยา)?/, '').replace('สัปดาห์ที่', 'สัปดาห์').replace(' ช่วงเดียวกัน', '');
+  c.fillStyle = '#10234A'; c.fillText(fit(pl, g1[1] - g1[0], 20), (g1[0] + g1[1]) / 2, ty + 43);
+  c.fillStyle = '#fff'; c.fillText(fit(m.curLabel, g2[1] - g2[0], 20), (g2[0] + g2[1]) / 2, ty + 43);
   c.font = F('700', 18); c.fillStyle = '#5B6B86';
   [['ป่วย (ราย)', X.pc], ['ตาย', X.pd], ['CFR %', X.pf], ['ป่วย (ราย)', X.cc], ['ตาย', X.cd], ['ต่อแสน ปชก.', X.cr], ['CFR %', X.cf]].forEach(([t, x]) => { c.textAlign = 'right'; c.fillText(t, x, ty + 92); });
   c.textAlign = 'left'; c.fillText('โรค / ภัยสุขภาพ', X.name, ty + 92);
@@ -186,22 +188,25 @@ async function drawDisease(canvas, m, sizeKey) {
   if (land) { c.textAlign = 'right'; c.fillStyle = '#fff'; c.font = F('700', 30); c.fillText(m.weekText, W - 60, 118); c.fillStyle = '#DCE7FF'; c.font = F('400', 24, 'Sarabun'); c.fillText(m.weekRange, W - 60, 152); c.fillText(m.period, W - 60, 182); c.textAlign = 'left'; }
   else { c.fillStyle = '#fff'; c.font = F('700', 24); c.fillText(`${m.weekText} (${m.weekRange})`, tx, 202); }
   if (m.demo) { c.fillStyle = '#E5484D'; rr(c, W - 360, 26, 300, 46, 23); c.fill(); c.fillStyle = '#fff'; c.font = F('700', 22); c.textAlign = 'center'; c.fillText('ข้อมูลจำลอง ห้ามใช้อ้างอิง', W - 210, 57); c.textAlign = 'left'; }
-  const K = kpisDisease(m), lvCol = LEVEL_COLOR[D.level] || '#94A3B8';
-  const statusTxt = `${LEVEL_TEXT[D.level] || '–'}`, statusSub = D.base != null ? `${m.windowWeeks} สัปดาห์ล่าสุด ${fmt(D.recent)} ราย / มัธยฐาน ${fmt(D.base)}${D.ratio != null && isFinite(D.ratio) ? ` (${fmt(D.ratio, 1)} เท่า)` : ''}` : `${m.windowWeeks} สัปดาห์ล่าสุด ${fmt(D.recent ?? 0)} ราย • ยังไม่มีมัธยฐาน 5 ปี`;
+  const K = kpisDisease(m);
+  const PL = { red: ['สูงกว่าปกติ', '#D93025'], orange: ['สูงกว่าปกติ', '#D93025'], yellow: ['เฝ้าระวัง', '#E0A800'], green: ['ปกติ', '#16A477'] }[D.level] || ['ยังประเมินไม่ได้', '#94A3B8'];
+  const lvCol = PL[1], statusTxt = PL[0], statusSub = `${m.windowWeeks} สัปดาห์ล่าสุด ${fmt(D.recent ?? 0)} ราย${D.ratio != null && isFinite(D.ratio) && D.base != null ? ` • ${D.ratio >= 1.1 ? `มากกว่าปีปกติ ${fmt(D.ratio, 1)} เท่า` : D.ratio <= 0.9 ? 'น้อยกว่าปีปกติ' : 'ใกล้เคียงปีปกติ'}` : ''}`;
 
   if (land) {
     const lx = 60, lw = 560;
-    K.forEach((k, i) => {
+    K.slice(0, 3).forEach((k, i) => {
       const y = 222 + i * 158, h = 142; card(c, lx, y, lw, h);
       c.fillStyle = k.col; rr(c, lx, y, 9, h, 4); c.fill();
       c.fillStyle = '#5B6B86'; c.font = F('600', 23); c.fillText(k.t, lx + 30, y + 42);
       c.fillStyle = k.col; c.font = F('700', 58); c.fillText(k.v, lx + 30, y + 106);
       c.fillStyle = '#5B6B86'; c.font = F('400', 20, 'Sarabun'); c.textAlign = 'right'; wrap(c, k.s, lx + lw - 24, y + 106, 260, 24, 2); c.textAlign = 'left';
     });
-    const sy = 222 + 4 * 158; card(c, lx, sy, lw, 990 - sy);
-    c.fillStyle = lvCol; rr(c, lx + 26, sy + 22, 150, 48, 24); c.fill();
-    c.fillStyle = D.level === 'yellow' ? '#10234A' : '#fff'; c.font = F('700', 24); c.textAlign = 'center'; c.fillText(statusTxt, lx + 101, sy + 54); c.textAlign = 'left';
-    c.fillStyle = '#10234A'; c.font = F('400', 19, 'Sarabun'); wrap(c, statusSub, lx + 192, sy + 42, lw - 214, 24, 2);
+    const sy = 222 + 3 * 158; card(c, lx, sy, lw, 990 - sy);
+    c.font = F('700', 22); const pw = c.measureText(statusTxt).width + 36; c.fillStyle = lvCol; rr(c, lx + 26, sy + 20, pw, 42, 21); c.fill();
+    c.fillStyle = D.level === 'yellow' ? '#10234A' : '#fff'; c.textAlign = 'center'; c.fillText(statusTxt, lx + 26 + pw / 2, sy + 49); c.textAlign = 'left';
+    c.fillStyle = '#10234A'; c.font = F('400', 19, 'Sarabun'); c.fillText(statusSub, lx + 26, sy + 92);
+    c.fillStyle = '#174EA6'; c.font = F('700', 22); c.fillText('มาตรการเฝ้าระวัง', lx + 26, sy + 134);
+    c.fillStyle = '#10234A'; c.font = F('400', 19, 'Sarabun'); { let ln = 0; const maxL = Math.floor((990 - sy - 160) / 26); for (const p of D.measures || []) { if (ln >= maxL) break; ln += wrap(c, '• ' + p, lx + 26, sy + 166 + ln * 26, lw - 52, 26, maxL - ln); } }
 
     const rx = 660, rw = 1200;
     card(c, rx, 222, rw, 372);
@@ -230,7 +235,7 @@ async function drawDisease(canvas, m, sizeKey) {
       });
       c.textAlign = 'left';
     } else {
-      c.fillStyle = '#174EA6'; c.font = F('700', 26); c.fillText('สรุปสถานการณ์', rx + 30, by + 44);
+      c.fillStyle = '#174EA6'; c.font = F('700', 26); c.fillText((m.boxTitle || 'สรุปสถานการณ์'), rx + 30, by + 44);
       c.fillStyle = '#10234A'; c.font = F('400', 23, 'Sarabun'); let ln = 0; const maxL = Math.floor((bh - 70) / 34);
       for (const p of m.summary) { if (ln >= maxL) break; ln += wrap(c, '• ' + p, rx + 30, by + 86 + ln * 34, rw - 60, 34, maxL - ln); }
     }
@@ -247,11 +252,13 @@ async function drawDisease(canvas, m, sizeKey) {
     c.fillStyle = '#5B6B86'; c.font = F('400', 18, 'Sarabun'); wrap(c, k.s, x + 26, y + 122, kw - 40, 20, 1);
   });
   let y = ky + 2 * (kh + 20);
-  card(c, 56, y, W - 112, 64); c.fillStyle = lvCol; rr(c, 76, y + 12, 130, 40, 20); c.fill();
-  c.fillStyle = D.level === 'yellow' ? '#10234A' : '#fff'; c.font = F('700', 21); c.textAlign = 'center'; c.fillText(statusTxt, 141, y + 40); c.textAlign = 'left';
-  c.fillStyle = '#10234A'; c.font = F('400', 19, 'Sarabun'); c.fillText(statusSub, 222, y + 40);
-  y += 84;
-  const ch = 300; card(c, 56, y, W - 112, ch);
+  { const ms = (D.measures || []).slice(0, H > 1500 ? 5 : 3); c.font = F('400', 19, 'Sarabun'); let nl = 0; ms.forEach(p => nl += Math.ceil(c.measureText('• ' + p).width / (W - 168)) ); const mh = 70 + (ms.length ? 34 + nl * 26 : 0);
+    card(c, 56, y, W - 112, mh); c.font = F('700', 21); const pw = c.measureText(statusTxt).width + 34; c.fillStyle = lvCol; rr(c, 76, y + 14, pw, 40, 20); c.fill();
+    c.fillStyle = D.level === 'yellow' ? '#10234A' : '#fff'; c.textAlign = 'center'; c.fillText(statusTxt, 76 + pw / 2, y + 42); c.textAlign = 'left';
+    c.fillStyle = '#10234A'; c.font = F('400', 19, 'Sarabun'); c.fillText(statusSub, 92 + pw, y + 42);
+    if (ms.length) { c.fillStyle = '#174EA6'; c.font = F('700', 20); c.fillText('มาตรการเฝ้าระวัง', 84, y + 92); c.fillStyle = '#10234A'; c.font = F('400', 19, 'Sarabun'); let ln = 0; for (const p of ms) ln += wrap(c, '• ' + p, 84, y + 122 + ln * 26, W - 168, 26, 3); }
+    y += mh + 20; }
+  const after = H - 96 - 20 - (y + 320), ch = 300 + (after < 200 && after > 0 ? after : 0); card(c, 56, y, W - 112, ch);
   c.fillStyle = '#174EA6'; c.font = F('700', 23); c.fillText(`ผู้ป่วยรายสัปดาห์ ${D.series.length} สัปดาห์ล่าสุด`, 84, y + 38);
   drawBars(c, D.series, 84, y + 48, W - 168, ch - 58, 0.85);
   y += ch + 20;
@@ -272,7 +279,7 @@ async function drawDisease(canvas, m, sizeKey) {
   }
   const sh = H - 96 - 20 - y;
   if (sh > 90) {
-    card(c, 56, y, W - 112, sh); c.fillStyle = '#174EA6'; c.font = F('700', 23); c.fillText('สรุปสถานการณ์', 84, y + 40);
+    card(c, 56, y, W - 112, sh); c.fillStyle = '#174EA6'; c.font = F('700', 23); c.fillText((m.boxTitle || 'สรุปสถานการณ์'), 84, y + 40);
     c.fillStyle = '#10234A'; c.font = F('400', 20, 'Sarabun'); let ln = 0; const maxL = Math.floor((sh - 60) / 29);
     for (const p of m.summary) { if (ln >= maxL) break; ln += wrap(c, '• ' + p, 84, y + 76 + ln * 29, W - 168, 29, maxL - ln); }
   }
@@ -340,7 +347,7 @@ export async function drawInfographic(canvas, m, sizeKey = 'ppt') {
   const sy = ty + th + 24, sh = BH - sy - 130;
   if (sh > 80) {
     card(c, 56, sy, BW - 112, sh);
-    c.fillStyle = '#174EA6'; c.font = F('700', 26); c.fillText('สรุปสถานการณ์', 84, sy + 46);
+    c.fillStyle = '#174EA6'; c.font = F('700', 26); c.fillText((m.boxTitle || 'สรุปสถานการณ์'), 84, sy + 46);
     c.fillStyle = '#10234A'; c.font = F('400', 22, 'Sarabun');
     let ln = 0; const maxL = Math.floor((sh - 70) / 32);
     for (const p of m.summary) { if (ln >= maxL) break; ln += wrap(c, '• ' + p, 84, sy + 86 + ln * 32, BW - 112 - 56, 32, maxL - ln); }
