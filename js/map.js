@@ -60,9 +60,9 @@ export function centroid(d) {
   centroidCache.set(d, best); return best;
 }
 const LABEL_NUDGE = { '3424': [0, 8], '3431': [0, -6], '3432': [0, 4] };
-function svgMap(db, colorOf, labelOf, selected, { light } = {}) {
+function svgMap(db, colorOf, labelOf, selected, { light, tipOf } = {}) {
   const [x0, y0, w, h] = db.mapSvg.viewBox;
-  const shapes = db.mapSvg.districts.map(o => `<path d="${o.d}" fill="${colorOf(o.code)}" class="geo${selected === o.code ? ' sel' : ''}" data-dc="${o.code}" tabindex="0" role="button" aria-label="${esc(o.name)}"><title>${esc(o.name)}: ${esc(labelOf(o.code))}</title></path>`).join('');
+  const shapes = db.mapSvg.districts.map(o => `<path d="${o.d}" fill="${colorOf(o.code)}" class="geo${selected === o.code ? ' sel' : ''}" data-dc="${o.code}" tabindex="0" role="button" aria-label="${esc(o.name)}"${tipOf ? ` data-tip="${esc(tipOf(o.code))}"` : ''}>${tipOf ? '' : `<title>${esc(o.name)}: ${esc(labelOf(o.code))}</title>`}</path>`).join('');
   const labels = db.mapSvg.districts.map(o => { const c = centroid(o.d); if (!c) return ''; const [dx, dy] = LABEL_NUDGE[o.code] || [0, 0];
     return `<g class="lbl" transform="translate(${(c.x + dx).toFixed(1)},${(c.y + dy).toFixed(1)})"><text y="-2" text-anchor="middle" class="m1">${esc(o.name.replace('อุบลราชธานี', ''))}</text><text y="14" text-anchor="middle" class="m2">${esc(labelOf(o.code))}</text></g>`; }).join('');
   return `<svg class="map real" viewBox="${x0 - 6} ${y0 - 6} ${w + 12} ${h + 12}">${shapes}${labels}</svg>`;

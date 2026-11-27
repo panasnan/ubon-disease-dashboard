@@ -169,6 +169,31 @@ function shell() {
   $('#fdc').value = S.dc; $('#fd').value = S.d;
 }
 
+function ctxBar() {
+  const parts = [];
+  if (S.dc !== 'ALL') parts.push(['พื้นที่', 'อ.' + distName(S.dc)]);
+  if (S.d !== 'ALL') parts.push(['โรค', dName(S.d)]);
+  if (S.fac && facIndex().get(S.fac)) parts.push(['หน่วยบริการ', facIndex().get(S.fac).name]);
+  if (!parts.length) return '';
+  return `<div class="ctxbar"><span class="muted">กำลังดูข้อมูล:</span>${parts.map(([k, v]) => `<span class="ctx"><small>${k}</small> ${esc(v)}</span>`).join('')}<button class="btn ghost sm" id="resetf">✕ ล้างตัวกรอง (ดูทั้งจังหวัด รวม 10 โรค)</button></div>`;
+}
+let _ab = null;
+function actionBar() {
+  if (S.demo || !DB.rows?.length) return '';
+  const key = S.y + '|' + DB.rows.length; if (_ab?.key === key) return _ab.html;
+  const m = model('ALL'); if (!m.has) return '';
+  const rising = m.per.filter(r => r.level === 'red' || r.level === 'orange').sort((a, b) => (b.ratio || 0) - (a.ratio || 0));
+  const G = m.hasDds ? districtSignals(m, 'ALL') : null, hot = G ? G.rows.filter(r => r.sig[0]).sort((a, b) => b.rr - a.rr) : [];
+  const cl = m.hasDds ? detectClusters(DB, m.alertT) : [];
+  const F = DB.facilities || [], miss = F.reduce((a, f) => a + Math.max(0, (+f.total || 0) - (+f.reported || 0)), 0);
+  const items = [];
+  if (rising.length) items.push(['red', 'โรคที่สูงกว่าปกติ', rising.slice(0, 4).map(r => `<b>${esc(r.name)}</b> ${fmt(r.ratio, 1)} เท่าของมัธยฐาน`).join(' • ')]);
+  if (hot.length) items.push(['orange', 'อำเภอที่อัตราป่วยสูงกว่าจังหวัด (รวม 10 โรค)', hot.slice(0, 5).map(r => `<b>${esc(r.x.name)}</b> ${fmt(r.rr, 1)}×`).join(' • ')]);
+  if (cl.length) items.push(['orange', 'กลุ่มก้อนที่เข้าเกณฑ์', `<b>${cl.length}</b> พื้นที่ — ${[...new Set(cl.map(c => dName(c.d)))].map(esc).join(', ')}`]);
+  if (miss) items.push(['yellow', 'ต้องเร่งติดตามการรายงาน', `สถานพยาบาลยังไม่ส่งรายงาน <b>${fmt(miss)}</b> แห่ง`]);
+  const html = items.length ? `<section class="abar"><div class="ab-h">📌 จุดที่ต้องโฟกัส สัปดาห์ที่ ${m.week?.week ?? ''}</div><div class="ab-list">${items.map(([c, t, v]) => `<div class="ab ${c}"><span class="ab-t">${t}</span><span class="ab-v">${v}</span></div>`).join('')}</div></section>` : '';
+  _ab = { key, html }; return html;
+}
 function header(m) {
   const fresh = m.has ? Math.floor((Date.now() - m.asOfEnd) / DAY) : null;
   const logo = '';
@@ -176,7 +201,7 @@ function header(m) {
     <div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สถานการณ์ 10 โรคที่ต้องเฝ้าระวัง</h1>
     <div class="sub">${esc(distName(S.dc))}${S.fac && facIndex().get(S.fac) ? ' • ' + esc(facIndex().get(S.fac).name) : ''} • ${esc(periodLabel(m))}</div></div>
     <div class="asof">${m.has && m.week ? `<b>สัปดาห์ระบาดวิทยาที่ ${m.week.week}</b><span>${thDate(m.week.from)} – ${thDate(m.week.to)}</span><span>${m.source === 'summary' ? 'ข้อมูล ณ ' + thDate(m.cut, false) + ' • รายงานประจำสัปดาห์' : 'ยอดสะสมถึง ' + thDate(m.cut, false)}</span>${m.partialWeek ? `<span class="partial" title="ยอดสะสมรวมผู้ป่วยในวันดังกล่าวแล้ว แต่กราฟรายสัปดาห์และสถานะสีใช้เฉพาะสัปดาห์ที่ครบ">สัปดาห์ที่ ${m.partialWeek.week} ยังไม่ครบ (${thDate(m.partialWeek.from)}–${thDate(m.cut)})</span>` : ''}${fresh > 7 ? `<span class="stale">${ico('alert', 14)} ข้อมูลเก่า ${fresh} วัน</span>` : ''}` : '<b>ยังไม่มีข้อมูลรายสัปดาห์</b>'}</div>
-  </header>${S.demo ? '<div class="demo-banner">⚠ กำลังแสดง <b>ข้อมูลจำลอง</b> เพื่อทดลองระบบ — ห้ามใช้อ้างอิงหรือเผยแพร่</div>' : ''}`;
+  </header>${S.demo ? '<div class="demo-banner">⚠ กำลังแสดง <b>ข้อมูลจำลอง</b> เพื่อทดลองระบบ — ห้ามใช้อ้างอิงหรือเผยแพร่</div>' : ''}${ctxBar()}${actionBar()}`;
 }
 
 // ---------- pages ----------
@@ -195,27 +220,27 @@ function pageOverview() {
   const pvTot = PV?.samePeriod ? PV.rows.reduce((a, r) => a + (r?.cases || 0), 0) : null, pvCh = pvTot ? pctChange(m.tot.c, pvTot) : null;
   const allKpis = `  <section class="kpis k4">
     <div class="kpi"><div class="k-t">ผู้ป่วยใหม่ สัปดาห์ที่ ${m.week?.week ?? '–'}</div><div class="k-v orange">${m.weekDelta != null ? '+' + fmt(m.weekDelta) : fmt(k.reduce((a, r) => a + (r.weekCases || 0), 0))}</div><div class="k-s">${m.weekDelta != null ? `ราย จากรายงานสัปดาห์ก่อน${isFinite(m.prevSnapT) ? ` (${thDate(m.prevSnapT)})` : ''}` : 'ราย ตามวันเริ่มป่วย (DDS)'}</div></div>
-    <div class="kpi"><div class="k-t">ผู้เสียชีวิตสะสม</div><div class="k-v ${m.tot.x ? 'red' : 'green'}">${fmt(m.tot.x)}</div><div class="k-s">${k.filter(r => r.deaths).map(r => `${r.name} ${r.deaths}`).join(' • ') || 'ไม่มีผู้เสียชีวิต'}</div></div>
+    <div class="kpi"><div class="k-t">ผู้เสียชีวิตสะสม</div><div class="k-v ${m.tot.x ? 'red' : 'green'}">${fmt(m.tot.x)}</div><div class="k-s">${k.filter(r => r.deaths).map(r => `${r.name} ${r.deaths}`).join(' • ') || 'ไม่มีผู้เสียชีวิต'}<br><i>สะสม ${esc(periodLabel(m))}</i></div></div>
     <div class="kpi"><div class="k-t">เทียบช่วงเดียวกันปี ${S.y - 1}</div><div class="k-v ${pvCh == null ? 'navy' : pvCh > 0 ? 'red' : 'green'}">${pvCh == null ? '–' : `${pvCh > 0 ? '▲' : '▼'} ${fmt(Math.abs(pvCh), 1)}%`}</div><div class="k-s">${pvTot ? `ปี ${S.y - 1}: ${fmt(pvTot)} ราย (สัปดาห์ที่ 1–${m.week?.week})` : 'ไม่มีข้อมูลเปรียบเทียบ'}</div></div>
-    <div class="kpi"><div class="k-t">โรคที่ต้องติดตาม/รุนแรง</div><div class="k-v ${redN ? 'red' : 'green'}">${redN}</div><div class="k-s">${k.filter(r => r.level === 'red' || r.level === 'orange').map(r => r.name).join(' • ') || 'ไม่มี'} (${DB.config.alert.window_weeks} สัปดาห์ล่าสุด เทียบมัธยฐาน 5 ปี)</div></div>
+    ${(() => { const F = DB.facilities || [], n = F.reduce((a, f) => a + (+f.total || 0), 0), r = F.reduce((a, f) => a + (+f.reported || 0), 0); return `<div class="kpi"><div class="k-t">สถานพยาบาลที่รายงานผู้ป่วย</div><div class="k-v ${n && r / n >= 1 ? 'green' : n && r / n >= .9 ? 'orange' : 'red'}">${n ? fmt(r) : '–'}<small> / ${fmt(n)} แห่ง</small></div><div class="k-s">${n ? `${fmt(r / n * 100, 1)}% • ${esc(F[0]?.period_label || 'รอบรายงานล่าสุด')}` : 'ยังไม่มีข้อมูลรายสถานพยาบาล'}</div></div>`; })()}
   </section>
 `;
-  return header(m) + levelRow(m) + (dsel ? diseaseBlock(m, dsel, di, PV) : allKpis) + `
-  <section class="grid2">
+  return header(m) + levelRow(m) + (dsel ? diseaseBlock(m, dsel, di, PV) : `<div class="grp-h">ความเคลื่อนไหวรอบสัปดาห์ล่าสุด <span class="muted">จังหวัดอุบลราชธานี</span></div>` + allKpis) + `
+  <section class="ovgrid">
     <div class="card"><div class="card-h"><h2>ตาราง 10 โรค</h2>${srcBadge}</div><p class="note hint">คลิกชื่อโรคเพื่อดูการ์ดรายโรคด้านบน</p>
       ${(() => { const pv = prevYearSummary(m); return pv ? `<p class="note">เทียบกับ ${esc(pv.label)}${pv.samePeriod ? '' : ' — ช่วงเวลาไม่เท่ากัน จึงไม่คำนวณร้อยละเปลี่ยนแปลง'}</p>` : ''; })()}
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>โรค</th>${prevYearSummary(m) ? `<th class="r prevcol">ป่วย ${PV.year}<small>${PV.ddc ? `สัปดาห์ที่ 1–${m.week?.week}` : ''}</small></th><th class="r prevcol">ตาย ${PV.year}<small>${PV.deathsFull ? 'ทั้งปี (กอง)' : ''}</small></th><th class="r prevcol">เทียบ ${PV.year}</th>` : ''}<th class="r">ป่วย</th><th class="r">ตาย</th><th class="r">ต่อแสน</th><th class="r">CFR%</th><th class="r">${sumSrc ? '+ สัปดาห์นี้' : 'เทียบปีก่อน'}</th><th>12 สัปดาห์</th><th>สถานะ</th></tr></thead><tbody>
-      ${k.map((r, i) => `<tr class="${S.d === r.id ? 'sel' : ''}"><td><a href="#" class="pick-d" data-d="${r.id}" title="คลิกเพื่อดูการ์ดรายโรค (คลิกซ้ำเพื่อกลับเป็นรวม 10 โรค)">${i + 1}. ${esc(r.name)}</a><div class="en">${esc(r.en)}</div></td>${PV ? `<td class="r prevcol">${PV.rows[i] ? fmt(PV.rows[i].cases) : '–'}</td><td class="r prevcol">${PV.rows[i] ? fmt(PV.rows[i].deaths) : '–'}</td><td class="r prevcol">${(() => { const c = PV.samePeriod && PV.rows[i]?.cases ? pctChange(r.cases, PV.rows[i].cases) : null; return c == null ? '–' : `<span class="trend ${c > 0 ? 'up' : 'dn'}">${c > 0 ? '▲' : '▼'} ${fmt(Math.abs(c), 0)}%</span>`; })()}</td>` : ''}<td class="r b">${fmt(r.cases)}</td><td class="r ${r.deaths ? 'red b' : ''}">${fmt(r.deaths)}</td><td class="r">${r.rate == null ? '–' : fmt(r.rate, 2)}</td><td class="r">${fmt(r.cfr, 2)}</td>
-      <td class="r">${sumSrc ? (r.weekDelta == null ? '–' : `<span class="${r.weekDelta > 0 ? 'b' : 'muted'}">${r.weekDelta > 0 ? '+' : ''}${fmt(r.weekDelta)}</span>${r.weekDeltaDeaths ? ` <small class="red">(ตาย +${r.weekDeltaDeaths})</small>` : ''}`) : r.change == null ? '–' : `<span class="trend ${r.change > 0 ? 'up' : 'dn'}">${r.change > 0 ? '▲' : '▼'} ${fmt(Math.abs(r.change), 1)}%</span>`}</td><td>${sparkline(r.spark, LEVEL_COLOR[r.level] || COLORS.blue)}</td><td>${chip(r.level)}</td></tr>`).join('')}
+      ${k.map((r, i) => `<tr class="${S.d === r.id ? 'sel' : ''}"><td><a href="#" class="pick-d" data-d="${r.id}" title="คลิกเพื่อดูการ์ดรายโรค (คลิกซ้ำเพื่อกลับเป็นรวม 10 โรค)">${i + 1}. ${esc(r.name)}</a><div class="en">${esc(r.en)}</div></td>${PV ? `<td class="r prevcol">${PV.rows[i] ? fmt(PV.rows[i].cases) : '–'}</td><td class="r prevcol">${PV.rows[i] ? fmt(PV.rows[i].deaths) : '–'}</td><td class="r prevcol">${(() => { const c = PV.samePeriod && PV.rows[i]?.cases ? pctChange(r.cases, PV.rows[i].cases) : null; return c == null ? '–' : `<span class="trend ${c > 0 ? 'up' : 'dn'}">${c > 0 ? '▲' : '▼'} ${fmt(Math.abs(c), 0)}%</span>`; })()}</td>` : ''}<td class="r b key big">${fmt(r.cases)}</td><td class="r ${r.deaths ? 'red b' : ''}">${fmt(r.deaths)}</td><td class="r key">${r.rate == null ? '–' : fmt(r.rate, 2)}</td><td class="r">${fmt(r.cfr, 2)}</td>
+      <td class="r">${sumSrc ? (r.weekDelta == null ? '–' : `<span class="${r.weekDelta > 0 ? 'b' : 'muted'}">${r.weekDelta > 0 ? '+' : ''}${fmt(r.weekDelta)}</span>${r.weekDeltaDeaths ? ` <small class="red">(ตาย +${r.weekDeltaDeaths})</small>` : ''}`) : r.change == null ? '–' : `<span class="trend ${r.change > 0 ? 'up' : 'dn'}">${r.change > 0 ? '▲' : '▼'} ${fmt(Math.abs(r.change), 1)}%</span>`}</td><td>${sparkline(r.spark, LEVEL_COLOR[r.level] || COLORS.blue, 132, 36)}</td><td>${chip(r.level)}</td></tr>`).join('')}
       </tbody><tfoot><tr><td>รวม 10 โรค</td>${PV ? `<td class="r prevcol">${fmt(PV.rows.reduce((a, r) => a + (r?.cases || 0), 0))}</td><td class="r prevcol">${fmt(PV.rows.reduce((a, r) => a + (r?.deaths || 0), 0))}</td><td class="r prevcol">${(() => { const t = PV.rows.reduce((a, r) => a + (r?.cases || 0), 0), c = PV.samePeriod && t ? pctChange(m.tot.c, t) : null; return c == null ? '–' : `${c > 0 ? '▲' : '▼'} ${fmt(Math.abs(c), 0)}%`; })()}</td>` : ''}<td class="r">${fmt(m.tot.c)}</td><td class="r">${fmt(m.tot.x)}</td><td class="r">${m.pop ? fmt(rate(m.tot.c, m.pop), 2) : '–'}</td><td class="r">${fmt(cfr(m.tot.x, m.tot.c), 2)}</td><td class="r">${sumSrc ? (m.weekDelta == null ? '–' : '+' + fmt(m.weekDelta)) : ch == null ? '–' : fmt(ch, 1) + '%'}</td><td></td><td></td></tr></tfoot></table></div>
       ${sumSrc && m.hasDds ? `<p class="note">ตัวเลขในตารางเป็นตัวเลขรายงานทางการประจำสัปดาห์ • สถานะสี กราฟ 12 สัปดาห์ และรายอำเภอ ใช้ DDS รายเคส (${fmt(m.ddsTot.c)} ราย ต่างจากทางการ ${fmt(Math.abs(m.tot.c - m.ddsTot.c))} ราย = ${fmt(Math.abs(m.tot.c - m.ddsTot.c) / (m.tot.c || 1) * 100, 2)}%) • ดูการตรวจยอดได้ที่หน้า "คุณภาพข้อมูล"</p>` : ''}</div>
     <div class="col">
-      <div class="card"><div class="card-h"><h2>อัตราป่วยต่อแสนประชากร</h2></div>${hbars([...k].sort((a, b) => (b.rate || 0) - (a.rate || 0)).map(r => ({ label: r.name, value: r.rate, color: LEVEL_COLOR[r.level] })), { unit: 'ต่อแสน' })}</div>
-      <div class="card"><div class="card-h"><h2>สรุปสถานการณ์${dsel ? ': ' + esc(dsel.name) : ''} (อัตโนมัติ)</h2><button class="btn ghost sm" id="copysum">คัดลอกข้อความ</button></div><ul class="sum">${(dsel ? diseaseLines(m, dsel, di, PV) : summaryLines(m)).map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>
+      <div class="card"><div class="card-h"><h2>${S.rv === 'cases' ? 'จำนวนผู้ป่วย' : 'อัตราป่วยต่อแสนประชากร'}</h2><div class="seg"><button data-rv="rate" class="${S.rv !== 'cases' ? 'on' : ''}">ต่อแสน</button><button data-rv="cases" class="${S.rv === 'cases' ? 'on' : ''}">ราย</button></div></div>${S.rv === 'cases' ? hbars([...k].sort((a, b) => b.cases - a.cases).map(r => ({ label: r.name, value: r.cases, color: LEVEL_COLOR[r.level] })), { unit: 'ราย', dp: 0 }) : hbars([...k].sort((a, b) => (b.rate || 0) - (a.rate || 0)).map(r => ({ label: r.name, value: r.rate, color: LEVEL_COLOR[r.level] })), { unit: 'ต่อแสน' })}</div>
+      <div class="card"><div class="card-h"><h2>สรุปสถานการณ์${dsel ? ': ' + esc(dsel.name) : ''} (อัตโนมัติ)</h2><button class="btn ghost sm" id="copysum">คัดลอกข้อความ</button></div><ul class="sum">${(dsel ? diseaseLines(m, dsel, di, PV) : summaryLines(m)).map(l => `<li>${esc(l).replace(/(\+?\d[\d,]*(?:\.\d+)?\s?(?:ราย|เท่า|%|ต่อแสน)?)/g, '<b>$1</b>').replace(/(เสียชีวิต|สูงกว่า|เพิ่มขึ้น|รุนแรง)/g, '<mark>$1</mark>')}</li>`).join('')}</ul></div>
     </div>
   </section>
   ${prelimCard()}
-  <section class="grid2 even">${levelsCard(m)}${ageCard()}</section>
+  <section class="ovgrid2">${levelsCard(m)}${ageCard()}</section>
   ${legend()}${notesCard()}`;
 }
 
@@ -370,7 +395,7 @@ function levelRow(m) {
     <div class="lv-v">${fmt(cum)} <small>ราย</small></div><div class="lv-s">${pop ? `${fmt(rate(cum, pop), 2)} ต่อแสน ปชก.` : ''}${extra || ''}</div>
     <div class="lv-r">${ratio == null ? '<span class="muted">4 สัปดาห์ล่าสุด: ผู้ป่วยน้อยเกินกว่าจะเทียบ</span>' : `<span class="chip ${RATIO_LV(ratio)}">${fmt(ratio, 2)} เท่า</span> ของมัธยฐาน 5 ปี (สัปดาห์ที่ ${L.w0}–${L.W})`}</div></div>`; };
   const name = S.d === 'ALL' ? 'รวม 10 โรค' : dName(S.d);
-  return `<section class="levels${m.dc !== 'ALL' ? ' four' : ''}"><div class="lv-head"><b>${esc(name)}</b> <span class="muted">เรียงจากระดับประเทศ → เขตสุขภาพที่ 10 → จังหวัด • เลือกโรคที่แถบด้านบนหรือคลิกชื่อโรคในตาราง</span></div>
+  return `<section class="levels${m.dc !== 'ALL' ? ' four' : ''}"><div class="grp-h">ภาพรวมระดับเปรียบเทียบ: ${esc(name)} <span class="muted">ประเทศ → เขตสุขภาพที่ 10 → จังหวัด • เลือกโรคที่แถบด้านบนหรือคลิกชื่อโรคในตาราง</span></div>
     <div class="lv-grid">${box('c1', 'ประเทศไทย', `สัปดาห์ที่ 1–${L.W} • กองระบาด`, agg('country').cum, P.population_country, agg('country'))}
     ${box('c2', 'เขตสุขภาพที่ 10', `สัปดาห์ที่ 1–${L.W} • กองระบาด`, agg('region').cum, P.population_region, agg('region'))}
     ${box('c3', 'จังหวัดอุบลราชธานี', `ข้อมูล ณ ${thDate(mp.cut)} • รายงานประจำสัปดาห์`, provC, mp.pop, agg('province'), ` • ตาย ${fmt(provX)} ราย`)}
@@ -380,9 +405,10 @@ function levelRow(m) {
 const AGE_ORDER = ['0-4', '5-14', '15-24', '25-34', '35-44', '45-54', '55-64', '65+'];
 function ageCard() {
   const A = (DB.ageProvince || []).filter(r => +r.year_be === S.y && (S.d === 'ALL' || r.disease_id === S.d)); if (!A.length || S.demo) return '';
-  const v = AGE_ORDER.map(g => ({ label: g === '65+' ? '65 ปีขึ้นไป' : g + ' ปี', value: A.filter(r => r.age_group === g).reduce((a, r) => a + +r.cases, 0), color: COLORS.blue }));
+  let v = AGE_ORDER.map(g => ({ label: g === '65+' ? '65 ปีขึ้นไป' : g + ' ปี', value: A.filter(r => r.age_group === g).reduce((a, r) => a + +r.cases, 0), color: COLORS.blue }));
   const tot = v.reduce((a, o) => a + o.value, 0), top = [...v].sort((a, b) => b.value - a.value)[0];
-  return `<div class="card"><div class="card-h"><h2>กลุ่มอายุ: ${esc(S.d === 'ALL' ? 'รวม 10 โรค' : dName(S.d))}</h2><span class="src">DDS สะสม ระดับจังหวัด</span></div>${hbars(v, { unit: 'ราย' })}
+  const pctMode = S.av === 'pct'; if (pctMode) v = v.map(o => ({ ...o, value: tot ? o.value / tot * 100 : 0 }));
+  return `<div class="card"><div class="card-h"><h2>กลุ่มอายุ: ${esc(S.d === 'ALL' ? 'รวม 10 โรค' : dName(S.d))}</h2><div class="seg"><button data-av="n" class="${!pctMode ? 'on' : ''}">ราย</button><button data-av="pct" class="${pctMode ? 'on' : ''}">%</button></div></div>${hbars(v, { unit: pctMode ? '%' : 'ราย', dp: pctMode ? 1 : 0 })}<p class="note">DDS สะสม ระดับจังหวัด</p>
   <p class="note">พบมากที่สุดในกลุ่ม ${esc(top.label)} (${fmt(top.value / (tot || 1) * 100, 1)}%) • แสดงเฉพาะระดับจังหวัด ไม่แยกเพศ/ตำบล เพื่อไม่ให้ระบุตัวบุคคลได้ (PDPA)</p></div>`;
 }
 function prelimCard() {
@@ -441,6 +467,19 @@ function weekBars(vals, ref, color, w = 150, h = 34) { // แท่งราย�
 function diseaseChips(page) {
   return `<div class="dchips">${[['ALL', 'รวม 10 โรค'], ...DB.config.diseases.map(z => [z.id, z.name])].map(([id, n]) => `<a href="#" class="dchip pick-d2 ${S.d === id ? 'on' : ''}" data-d="${id}">${esc(n)}</a>`).join('')}</div>`;
 }
+function districtDrill(m, d, G, N) { // รายละเอียดอำเภอที่เลือก: โรคที่ขับเคลื่อนยอด + รายตำบล
+  const x = DB.districts.find(o => o.code === S.dc); if (!x) return '';
+  const r = G.rows.find(o => o.x.code === S.dc), Wn = G.Wn, end = m.alertT;
+  const sumW = (id, dc) => { let c = 0; for (let i = 0; i < Wn; i++) c += cell(DB, end - i * 7 * DAY, id, dc).c; return c; };
+  const ds = DB.config.diseases.map(z => { const c = sumW(z.id, x.code), p = sumW(z.id, 'ALL'), rt = rate(c, x.pop), prt = rate(p, DB.popTotal); return { z, c, rt, q: prt ? rt / prt : null }; }).filter(o => o.c > 0).sort((a, b) => b.c - a.c);
+  const tot = ds.reduce((a, o) => a + o.c, 0);
+  const tam = d !== 'ALL' ? (DB.tambonYear || []).filter(t => +t.year_be === S.y && t.district_code === S.dc && t.disease_id === d).sort((a, b) => (b.cases === '<3' ? 0 : +b.cases) - (a.cases === '<3' ? 0 : +a.cases)) : [];
+  return `<div class="card drill"><div class="card-h"><h2>อำเภอ${esc(x.name)} • ${Wn} สัปดาห์ล่าสุด</h2><button class="btn ghost sm" id="resetf">✕ ปิด</button></div>
+  <div class="drill-k"><div><small>ผู้ป่วย ${esc(d === 'ALL' ? 'รวม 10 โรค' : dName(d))}</small><b>${fmt(r?.rec)}</b> ราย</div><div><small>อัตราป่วย</small><b>${r?.rt == null ? '–' : fmt(r.rt, 1)}</b> ต่อแสน</div><div><small>เทียบจังหวัด</small><b>${r?.rr == null ? '–' : fmt(r.rr, 2) + '×'}</b></div><div><small>สถานะ</small>${dChip(r ? dStatus(r) : 0)}</div></div>
+  <div class="grid2 even"><div><h3>โรคที่ขับเคลื่อนยอดในอำเภอ</h3><table class="tbl"><thead><tr><th>โรค</th><th class="r">${Wn} สัปดาห์</th><th class="r">สัดส่วน</th><th class="r">เทียบจังหวัด</th></tr></thead><tbody>${ds.map(o => `<tr><td><a href="#" class="pick-d2" data-d="${o.z.id}">${esc(o.z.name)}</a></td><td class="r b">${fmt(o.c)}</td><td class="r">${fmt(o.c / (tot || 1) * 100, 0)}%</td><td class="r ${o.q >= 1.5 && o.c >= 3 ? 'b red' : ''}">${o.q == null ? '–' : fmt(o.q, 2) + '×'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">ไม่พบผู้ป่วย</td></tr>'}</tbody></table></div>
+  <div><h3>รายตำบล ${d === 'ALL' ? '' : '• ' + esc(dName(d)) + ` (สะสมปี ${S.y})`}</h3>${d === 'ALL' ? '<div class="empty">เลือกโรคจากปุ่มด้านบน หรือคลิกชื่อโรคในตารางซ้าย เพื่อดูรายตำบล</div>' : tam.length ? `<div class="tam">${tam.map(t => `<div class="tm"><span class="muted">ตำบล ${esc(t.subdistrict_code.slice(-2))}</span><b>${esc(t.cases)}</b></div>`).join('')}</div><p class="note">รหัสตำบล 2 หลักท้าย • "&lt;3" = 1–2 ราย (PDPA)</p>` : '<div class="empty">ไม่พบผู้ป่วยในปีนี้</div>'}</div></div></div>`;
+}
+const DSORT = { st: ['สถานะ', r => r.st * 1e6 + (r.rt || 0)], last: ['สัปดาห์ล่าสุด', r => r.last], rec: ['4 สัปดาห์', r => r.rec], rt: ['ต่อแสน', r => r.rt || 0], name: ['อำเภอ', r => r.x.name] };
 function pageDistrict() {
   const m = model('ALL');
   if (!m.has || !m.hasDds) return header(m) + emptyNote();
@@ -448,26 +487,25 @@ function pageDistrict() {
   const wL = epiWeek(m.alertT, S.y - 543).week, w0 = Math.max(1, wL - G.Wn + 1), dn = d === 'ALL' ? 'รวม 10 โรค' : dName(d);
   const N = 8, wk = Array.from({ length: N }, (_, i) => m.alertT - (N - 1 - i) * 7 * DAY);
   G.rows.forEach(r => { r.st = dStatus(r); r.ser = wk.map(t => cell(DB, t, d, r.x.code).c); r.last = r.ser[N - 1]; });
-  const sorted = [...G.rows].sort((p, q) => q.st - p.st || (q.rt ?? 0) - (p.rt ?? 0));
-  const hot = sorted.filter(r => r.st >= 2);
-  const tam = S.dc !== 'ALL' && d !== 'ALL' ? (DB.tambonYear || []).filter(r => +r.year_be === S.y && r.district_code === S.dc && r.disease_id === d).sort((a, b) => (b.cases === '<3' ? 0 : +b.cases) - (a.cases === '<3' ? 0 : +a.cases)) : [];
-  return header(m) + diseaseChips() + `
-  <div class="card hl"><b>${esc(dn)} • สัปดาห์ที่ ${w0}–${wL}:</b> ${hot.length ? `อำเภอที่อัตราป่วยสูงกว่าจังหวัดชัดเจน <b>${hot.length}</b> อำเภอ — ${hot.slice(0, 6).map(r => `${esc(r.x.name)} (${fmt(r.rr, 1)} เท่า)`).join(', ')}` : 'ไม่มีอำเภอที่อัตราป่วยสูงกว่าจังหวัดชัดเจน'}${sorted.some(r => r.st === 1) ? ` • กำลังเพิ่มขึ้น: ${sorted.filter(r => r.st === 1).map(r => esc(r.x.name)).join(', ')}` : ''}</div>
+  const sk = DSORT[S.ds] ? S.ds : 'st', sorted = [...G.rows].sort((p, q) => sk === 'name' ? p.x.name.localeCompare(q.x.name, 'th') : DSORT[sk][1](q) - DSORT[sk][1](p));
+  const hot = G.rows.filter(r => r.st >= 2).sort((a, b) => b.rr - a.rr);
+  const th = (k, cls = 'r') => `<th class="${cls}"><a href="#" class="sortby ${sk === k ? 'on' : ''}" data-sort="${k}">${DSORT[k][0]}${sk === k ? ' ▾' : ''}</a></th>`;
+  const tip = dc => { const r = byCode[dc]; if (!r) return ''; return `${r.x.name}\n${dn}\nสัปดาห์ที่ ${wL}: ${fmt(r.last)} ราย\n${G.Wn} สัปดาห์: ${fmt(r.rec)} ราย • ${r.rt == null ? '–' : fmt(r.rt, 1)} ต่อแสน\nเทียบจังหวัด: ${r.rr == null ? '–' : fmt(r.rr, 2) + ' เท่า'}\nสะสมปี ${S.y}: ${fmt(r.cum)} ราย\nสถานะ: ${DST[r.st].t}`; };
+  return header(m) + diseaseChips() + (S.dc !== 'ALL' ? districtDrill(m, d, G, N) : '') + `
+  <div class="card hl"><b>${esc(dn)} • สัปดาห์ที่ ${w0}–${wL}:</b> ${hot.length ? `อัตราป่วยสูงกว่าจังหวัดชัดเจน <b>${hot.length}</b> อำเภอ — ${hot.slice(0, 6).map(r => `${esc(r.x.name)} (${fmt(r.rr, 1)} เท่า)`).join(', ')}` : 'ไม่มีอำเภอที่อัตราป่วยสูงกว่าจังหวัดชัดเจน'}${G.rows.some(r => r.st === 1) ? ` • กำลังเพิ่มขึ้น: ${G.rows.filter(r => r.st === 1).map(r => esc(r.x.name)).join(', ')}` : ''}</div>
   <section class="dgrid">
-    <div class="card"><div class="card-h"><h2>แผนที่: ${esc(dn)}</h2><span class="muted">คลิกอำเภอเพื่อดูรายตำบล</span></div>
-    ${renderMap(DB, dc => DST[byCode[dc]?.st || 0].c, dc => byCode[dc] ? `${fmt(byCode[dc].rec)} ราย` : '', S.dc)}
+    <div class="card"><div class="card-h"><h2>แผนที่</h2><span class="chip info big">${esc(dn)}</span></div>
+    ${renderMap(DB, dc => DST[byCode[dc]?.st || 0].c, dc => byCode[dc] ? `${fmt(byCode[dc].rec)} ราย` : '', S.dc, { tipOf: tip })}
     <div class="legend-card">${DST.map((o, i) => dChip(i)).join('')}</div>
-    <p class="note">ตัวเลขบนแผนที่ = ผู้ป่วย ${G.Wn} สัปดาห์ล่าสุด • <b>สูงกว่าจังหวัด</b> = อัตราป่วยตั้งแต่ 1.5 เท่าของทั้งจังหวัด • <b>เพิ่มขึ้น</b> = ${G.Wn} สัปดาห์ล่าสุดมากกว่า ${G.Wn} สัปดาห์ก่อนหน้า 1.5 เท่าขึ้นไป</p></div>
-    <div class="card"><div class="card-h"><h2>เฝ้าระวังรายอำเภอ รายสัปดาห์</h2><span class="muted">DDS ตามวันเริ่มป่วย</span></div>
-    <div class="tbl-wrap"><table class="tbl dtbl"><thead><tr><th>อำเภอ</th><th class="r">สัปดาห์ที่ ${wL}</th><th class="r">${G.Wn} สัปดาห์</th><th class="r">ต่อแสน</th><th>${N} สัปดาห์ล่าสุด</th><th>สถานะ</th></tr></thead><tbody>
-    ${sorted.map(r => `<tr class="${S.dc === r.x.code ? 'sel' : ''}"><td><a href="#" class="pick-dc" data-dc="${r.x.code}">${esc(r.x.name)}</a></td><td class="r b">${fmt(r.last)}</td><td class="r">${fmt(r.rec)}</td><td class="r">${r.rt == null ? '–' : fmt(r.rt, 1)}</td><td>${weekBars(r.ser, null, r.st === 0 ? '#4F86DB' : r.st === 1 ? '#D9A21B' : DST[r.st].c)}</td><td>${dChip(r.st)}</td></tr>`).join('')}
-    </tbody><tfoot><tr><td>ทั้งจังหวัด</td><td class="r">${fmt(cell(DB, m.alertT, d, 'ALL').c)}</td><td class="r">${fmt(G.provRec)}</td><td class="r">${G.provRate == null ? '–' : fmt(G.provRate, 1)}</td><td></td><td></td></tr></tfoot></table></div>
+    <p class="note">ชี้ที่อำเภอเพื่อดูสรุป • คลิกเพื่อดูรายละเอียด • ตัวเลขบนแผนที่ = ผู้ป่วย ${G.Wn} สัปดาห์ล่าสุด<br><b>สูงกว่าจังหวัด</b> = อัตราป่วยตั้งแต่ 1.5 เท่าของทั้งจังหวัด • <b>เพิ่มขึ้น</b> = ${G.Wn} สัปดาห์ล่าสุดมากกว่า ${G.Wn} สัปดาห์ก่อนหน้า 1.5 เท่าขึ้นไป</p></div>
+    <div class="card"><div class="card-h"><h2>เฝ้าระวังรายอำเภอ รายสัปดาห์</h2><span class="muted">คลิกหัวคอลัมน์เพื่อเรียง</span></div>
+    <div class="tbl-wrap"><table class="tbl dtbl"><thead><tr>${th('name', '')}${th('st', '')}${th('last')}${th('rec')}${th('rt')}<th class="spc">แนวโน้ม ${N} สัปดาห์<small>สัปดาห์ที่ ${Math.max(1, wL - N + 1)}–${wL}</small></th></tr></thead><tbody>
+    ${sorted.map(r => `<tr class="${S.dc === r.x.code ? 'sel' : ''} ${r.st >= 2 ? 'hot' : ''}"><td><a href="#" class="pick-dc" data-dc="${r.x.code}">${esc(r.x.name)}</a></td><td>${dChip(r.st)}</td><td class="r b big">${fmt(r.last)}</td><td class="r">${fmt(r.rec)}</td><td class="r">${r.rt == null ? '–' : fmt(r.rt, 1)}</td><td class="spc">${weekBars(r.ser, null, r.st === 0 ? '#4F86DB' : r.st === 1 ? '#D9A21B' : DST[r.st].c, 128, 32)}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td>ทั้งจังหวัด</td><td></td><td class="r">${fmt(cell(DB, m.alertT, d, 'ALL').c)}</td><td class="r">${fmt(G.provRec)}</td><td class="r">${G.provRate == null ? '–' : fmt(G.provRate, 1)}</td><td></td></tr></tfoot></table></div>
     <details class="more"><summary>ดูเพิ่ม: ยอดสะสมปี ${S.y} และเทียบช่วงเดียวกันปี ${S.y - 1}</summary>
     <table class="tbl"><thead><tr><th>อำเภอ</th><th class="r">สะสม ${S.y}</th><th class="r">ช่วงเดียวกัน ${S.y - 1} (ประมาณ)</th><th class="r">เท่า</th></tr></thead><tbody>${[...G.rows].sort((a, b) => (b.vs ?? 0) - (a.vs ?? 0)).map(r => `<tr><td>${esc(r.x.name)}</td><td class="r">${fmt(r.cum)}</td><td class="r">${r.est == null ? '–' : fmt(Math.round(r.est))}</td><td class="r ${r.vs >= 1.5 ? 'b red' : ''}">${r.vs == null ? '–' : fmt(r.vs, 2) + '×'}</td></tr>`).join('')}</tbody></table>
     <p class="note">สะสม ${S.y} = ตารางรายอำเภอของกองระบาด • ช่วงเดียวกันปี ${S.y - 1} ประมาณจากยอดทั้งปีรายอำเภอ × สัดส่วนสะสมถึงสัปดาห์ที่ ${G.Wk} ของจังหวัด</p></details></div>
-  </section>
-  ${S.dc !== 'ALL' ? `<div class="card"><div class="card-h"><h2>รายตำบล: ${esc(distName(S.dc))} • ${esc(dn)}</h2><span class="src">DDS สะสมปี ${S.y}</span></div>
-    ${d === 'ALL' ? '<div class="empty">เลือกโรคด้านบนเพื่อดูรายตำบล</div>' : tam.length ? `<div class="tam">${tam.map(r => `<div class="tm"><span class="muted">ตำบล ${esc(r.subdistrict_code.slice(-2))}</span><b>${esc(r.cases)}</b></div>`).join('')}</div><p class="note">รหัสตำบล 2 หลักท้าย • "&lt;3" = ผู้ป่วย 1–2 ราย ปิดตัวเลขเพื่อป้องกันการระบุตัวบุคคล</p>` : '<div class="empty">ไม่พบผู้ป่วยในปีนี้</div>'}</div>` : ''}`;
+  </section>`;
 }
 
 function pageTrend() {
@@ -485,13 +523,13 @@ function pageTrend() {
   const tiles = DB.districts.map(x => { const ser = wk.map(t => cell(DB, t, d, x.code).c), ref = provSer.map(v => v * x.pop / pop); const g = byC[x.code]; const st = g ? dStatus(g) : 0;
     return { x, ser, ref, st, rec: ser.slice(-4).reduce((a, v) => a + v, 0), rt: g?.rt }; }).sort((a, b) => b.st - a.st || (b.rt ?? 0) - (a.rt ?? 0));
   return header(m) + diseaseChips() + `
-  <div class="card"><div class="card-h"><h2>ผู้ป่วยรายสัปดาห์: ${esc(dn)} — ${esc(distName(S.dc))}</h2><span class="muted">เส้นส้ม = มัธยฐาน 5 ปี</span></div>
+  <div class="card"><div class="card-h"><h2>ผู้ป่วยรายสัปดาห์: ${esc(dn)} — ${esc(distName(S.dc))}</h2><span class="muted">เส้นม่วง = มัธยฐาน 5 ปี • เส้นประแดง = 1.5 เท่าของมัธยฐาน</span></div>
   ${epiCurve({ weeks, cur, prev, base, ratioOrange: DB.config.alert.ratio_orange, prov: weeks.map(t => t <= m.alertT && t > m.alertT - PW * 7 * DAY) })}
   <p class="note">แสดงถึงสัปดาห์ที่ ${epiWeek(m.alertT, S.y - 543).week} (สัปดาห์ที่ครบล่าสุดของ DDS) • ${PW} สัปดาห์ล่าสุดเป็นข้อมูลเบื้องต้น อาจเพิ่มขึ้นเมื่อมีรายงานเข้ามาภายหลัง</p></div>
-  <div class="card"><div class="card-h"><h2>25 อำเภอ × ${N} สัปดาห์ล่าสุด: ${esc(dn)}</h2><span class="muted">สัปดาห์ที่ ${wn[0]}–${wn[N - 1]} • คลิกอำเภอเพื่อเลือก</span></div>
+  <div class="card"><div class="card-h"><h2>25 อำเภอ × ${N} สัปดาห์ล่าสุด: ${esc(dn)}</h2><span class="muted">สัปดาห์ที่ ${wn[0]}–${wn[N - 1]} • คลิกกล่องเพื่อขยาย</span></div>
   <p class="note hint">แต่ละกล่อง = 1 อำเภอ แท่ง = ผู้ป่วยแต่ละสัปดาห์ (แท่งขวาสุด = สัปดาห์ล่าสุด) • <b>เส้นประ</b> = จำนวนที่ควรเป็นถ้าอำเภอป่วยในอัตราเดียวกับทั้งจังหวัด → <b>แท่งสูงกว่าเส้นประ = สูงกว่าค่าเฉลี่ยจังหวัด</b> • เรียงจากอำเภอที่ต้องเฝ้าระวังก่อน</p>
-  <div class="smult">${tiles.map(o => `<a href="#" class="sm pick-dc st${o.st}" data-dc="${o.x.code}"><div class="sm-h"><b>${esc(o.x.name)}</b>${o.st ? dChip(o.st) : ''}</div>
-    ${weekBars(o.ser, o.ref, o.st >= 2 ? DST[o.st].c : o.st === 1 ? '#D9A21B' : '#4F86DB', 210, 64)}
+  <div class="smult">${tiles.map(o => `<a href="#" class="sm st${o.st}" data-big="${o.x.code}"><div class="sm-h"><b>${esc(o.x.name)}</b>${o.st ? dChip(o.st) : ''}</div>
+    ${weekBars(o.ser, o.ref, o.st >= 2 ? DST[o.st].c : o.st === 1 ? '#D9A21B' : '#4F86DB', 250, 78)}
     <div class="sm-f"><span>สัปดาห์ล่าสุด <b>${fmt(o.ser[N - 1])}</b></span><span>4 สัปดาห์ <b>${fmt(o.rec)}</b></span><span>${o.rt == null ? '' : fmt(o.rt, 1) + '/แสน'}</span></div></a>`).join('')}</div>
   <p class="note">ข้อมูลจาก DDS ตามวันเริ่มป่วย • ความสูงของแท่งปรับตามแต่ละอำเภอ (ดูตัวเลขด้านล่างกล่องเพื่อเทียบจำนวนจริง)</p></div>`;
 }
@@ -859,6 +897,15 @@ function openGroup(t) {
   <p class="note">คลิกชื่อสถานพยาบาลเพื่อดูผลการรายงานรายหน่วย</p><div class="dl"><button class="btn" id="mclose2">ปิด</button></div></div></div>`;
   $('#modal').hidden = false; setTimeout(() => $('#modal .box')?.focus(), 0);
 }
+function openBig(dc) { // ขยายกราฟรายสัปดาห์ของอำเภอ (16 สัปดาห์) ในหน้าต่างลอย
+  const m = model(dc), x = DB.districts.find(o => o.code === dc), d = S.d, N = 16, PW = DB.config.provisional_weeks ?? 2;
+  const weeks = Array.from({ length: N }, (_, i) => m.alertT - (N - 1 - i) * 7 * DAY);
+  const cur = weeks.map(t => cell(DB, t, d, dc).c), provW = weeks.map(t => cell(DB, t, d, 'ALL').c * x.pop / DB.popTotal);
+  $('#modal').innerHTML = `<div class="box wide" tabindex="-1" role="dialog" aria-modal="true"><div class="box-h"><div><div class="eyebrow">${esc(d === 'ALL' ? 'รวม 10 โรค' : dName(d))} • ${N} สัปดาห์ล่าสุด</div><h2>อำเภอ${esc(x.name)}</h2></div><button class="btn ghost sm" id="mclose2">ปิด ✕</button></div>
+  <div class="box-b">${epiCurve({ weeks, cur, prev: weeks.map(() => null), base: weeks.map(() => null), ratioOrange: 1.5, prov: weeks.map((t, i) => i >= N - PW), ref: provW })}
+  <p class="note">เส้นประเทา = จำนวนที่ควรเป็นถ้าอำเภอป่วยในอัตราเดียวกับทั้งจังหวัด</p><div class="dl"><button class="btn ghost" data-page="district" id="gomap" data-dcgo="${dc}">ดูรายละเอียดอำเภอในหน้าแผนที่</button></div></div></div>`;
+  $('#modal').hidden = false; setTimeout(() => $('#modal .box')?.focus(), 0);
+}
 function closeModal() { $('#modal').hidden = true; }
 
 // ---------- render & events ----------
@@ -894,9 +941,14 @@ function bind() {
   document.addEventListener('input', e => { if (e.target.id === 'q') showResults(); });
   document.addEventListener('focusin', e => { if (e.target.id === 'q' && e.target.value) showResults(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); $('#qres').hidden = true; } if (e.key === 'Enter' && e.target.id === 'q') { e.preventDefault(); const r = searchFac(e.target.value); if (r[0]) selectFac(r[0].code); } });
+  const tipEl = document.createElement('div'); tipEl.className = 'maptip'; document.body.appendChild(tipEl);
+  document.addEventListener('mousemove', e => { const t = e.target.closest?.('[data-tip]'); if (!t || !t.dataset.tip) { tipEl.style.display = 'none'; return; }
+    const L = esc(t.dataset.tip).split('\n'); tipEl.innerHTML = `<b>${L[0]}</b><br>${L.slice(1).join('<br>')}`; tipEl.style.display = 'block';
+    const x = Math.min(e.clientX + 16, innerWidth - tipEl.offsetWidth - 8), y = Math.min(e.clientY + 16, innerHeight - tipEl.offsetHeight - 8); tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px'; });
   document.addEventListener('click', e => {
     const vg = e.target.closest('[data-vgroup]'); if (vg) { e.preventDefault(); return openGroup(vg.dataset.vgroup); }
     const fb = e.target.closest('[data-fac]'); if (fb) { e.preventDefault(); e.stopImmediatePropagation(); selectFac(fb.dataset.fac); return; }
+    if (e.target.closest('#resetf')) { S.dc = 'ALL'; S.d = 'ALL'; S.fac = ''; render(); return; }
     if (e.target.closest('#facx')) { e.stopImmediatePropagation(); S.fac = ''; render(); return; }
     if (e.target.closest('#mclose2')) { e.stopImmediatePropagation(); closeModal(); return; }
     if (!e.target.closest('#qres') && e.target.id !== 'q') $('#qres').hidden = true;
@@ -905,6 +957,11 @@ function bind() {
     const pg = e.target.closest('[data-page-go]'); if (pg) { e.stopImmediatePropagation(); S.page = pg.dataset.pageGo; closeModal(); render(); return; }
   });
   document.addEventListener('click', async e => {
+    const sr = e.target.closest('[data-ser]'); if (sr) { e.preventDefault(); const w = document.getElementById(sr.closest('[data-ec]').dataset.ec); w.classList.toggle('hide-' + sr.dataset.ser); sr.classList.toggle('off'); return; }
+    const bg = e.target.closest('[data-big]'); if (bg) { e.preventDefault(); openBig(bg.dataset.big); return; }
+    const gm = e.target.closest('#gomap'); if (gm) { e.preventDefault(); closeModal(); S.dc = gm.dataset.dcgo; S.page = 'district'; render(); return; }
+    const so = e.target.closest('.sortby'); if (so) { e.preventDefault(); S.ds = so.dataset.sort; render({ keep: true }); return; }
+    const sg = e.target.closest('[data-rv],[data-av]'); if (sg) { e.preventDefault(); if (sg.dataset.rv) S.rv = sg.dataset.rv; else S.av = sg.dataset.av; render({ keep: true }); return; }
     const tb = e.target.closest('[data-tpl]'); if (tb) { e.preventDefault(); S.tpl = tb.dataset.tpl; render({ keep: true }); return; }
     const t = e.target.closest('[data-page],[data-yt],.go-trend,.pick-d,.pick-d2,#dall,.pick-dc,[data-dc],#copylink,#copysum,#copyimg,#dl,#dlall,#menuBtn');
     if (!t) return;

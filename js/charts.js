@@ -19,16 +19,17 @@ export function hbars(items, { dp = 2, unit = '', lw = 0 } = {}) {
 export function sparkline(vals, color = COLORS.blue, w = 96, h = 26) {
   if (!vals.length) return '';
   const max = Math.max(...vals, 1);
-  const pts = vals.map((v, i) => `${(i / Math.max(1, vals.length - 1) * (w - 4) + 2).toFixed(1)},${(h - 3 - v / max * (h - 6)).toFixed(1)}`).join(' ');
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+  const P = vals.map((v, i) => [(i / Math.max(1, vals.length - 1) * (w - 8) + 4), (h - 4 - v / max * (h - 10))]);
+  const im = vals.indexOf(Math.max(...vals)), il = vals.length - 1;
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><polyline points="${P.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${im !== il ? `<circle cx="${P[im][0]}" cy="${P[im][1]}" r="2.6" fill="#fff" stroke="${color}" stroke-width="1.6"><title>สูงสุด ${vals[im]}</title></circle>` : ''}<circle cx="${P[il][0]}" cy="${P[il][1]}" r="3.4" fill="${color}"><title>ล่าสุด ${vals[il]}</title></circle></svg>`;
 }
 
 // epi curve: bars = this period, dashed line = previous year, band = 5-yr median (+ orange line at ratio)
-export function epiCurve({ weeks, cur, prev, base, ratioOrange = 1.5, prov = [] }) {
+export function epiCurve({ weeks, cur, prev, base, ratioOrange = 1.5, prov = [], ref = null }) {
   const W = 860, H = 280, L = 48, R = 12, T = 14, B = 40;
   const n = weeks.length;
   if (!n) return '<div class="empty">ยังไม่มีข้อมูลรายสัปดาห์</div>';
-  const all = [...cur.filter(v => v != null), ...prev.filter(v => v != null), ...base.filter(v => v != null).map(v => v * ratioOrange)];
+  const all = [...cur.filter(v => v != null), ...prev.filter(v => v != null), ...base.filter(v => v != null).map(v => v * ratioOrange), ...(ref || [])];
   const max = niceMax(Math.max(...all, 1));
   const x = i => L + (i + 0.5) * (W - L - R) / n, bw = Math.max(2, (W - L - R) / n * 0.62);
   const y = v => T + (H - T - B) * (1 - v / max);
@@ -50,8 +51,12 @@ export function epiCurve({ weeks, cur, prev, base, ratioOrange = 1.5, prov = [] 
   const pl = prev.some(v => v != null) ? `<polyline points="${prev.map((v, i) => `${x(i)},${y(v || 0)}`).join(' ')}" class="prevline"/>` : '';
   const step = Math.ceil(n / 13);
   const xl = weeks.map((t, i) => i % step ? '' : `<text x="${x(i)}" y="${H - B + 16}" class="ax" text-anchor="middle">W${epiWeek(t).week}</text><text x="${x(i)}" y="${H - B + 30}" class="ax sm" text-anchor="middle">${thDate(epiWeek(t).from)}</text>`).join('');
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟผู้ป่วยรายสัปดาห์">${g}${band}${bars}${pl}${xl}</svg>
-  <div class="legend"><span><i style="background:${COLORS.blue}"></i>ผู้ป่วยรายสัปดาห์</span>${prov.some(Boolean) ? `<span><i class="provi"></i>ข้อมูลเบื้องต้น (รายงานยังทยอยเข้า)</span>` : ''}<span><i class="ln dash"></i>ปีก่อนช่วงเดียวกัน</span>${hasBase ? `<span><i style="background:#16A47733"></i>ใต้ค่ามัธยฐาน 5 ปี</span><span><i class="ln org"></i>${ratioOrange}× มัธยฐาน (ติดตาม)</span>` : '<span class="muted">ยังไม่มีค่ามัธยฐาน 5 ปี (รอข้อมูลย้อนหลัง 5 ปี)</span>'}</div>`;
+  const pi = prov.map((p, i) => p && cur[i] != null ? i : -1).filter(i => i >= 0);
+  const provLbl = pi.length ? `<g class="provlbl"><rect x="${x(pi[0]) - bw / 2 - 4}" y="${T}" width="${x(pi[pi.length - 1]) - x(pi[0]) + bw + 8}" height="${H - T - B}" rx="6"/><text x="${(x(pi[0]) + x(pi[pi.length - 1])) / 2}" y="${T + 14}" text-anchor="middle">ข้อมูลยังไม่ครบ</text></g>` : '';
+  const rl = ref ? `<polyline points="${ref.map((v, i) => `${x(i)},${y(v || 0)}`).join(' ')}" class="refline"/>` : '';
+  const uid = 'ec' + Math.random().toString(36).slice(2, 8);
+  return `<div class="ecwrap" id="${uid}"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟผู้ป่วยรายสัปดาห์">${g}${provLbl}<g class="s-med">${band}</g><g class="s-bars">${bars}</g><g class="s-prev">${pl}</g>${rl}${xl}</svg>
+  <div class="legend tog" data-ec="${uid}"><span><button data-ser="s-bars" title="คลิกเพื่อซ่อน/แสดง"><i style="background:${COLORS.blue}"></i>ผู้ป่วยรายสัปดาห์</button></span>${prov.some(Boolean) ? `<span><i class="provi"></i>ข้อมูลเบื้องต้น (รายงานยังทยอยเข้า)</span>` : ''}${pl ? `<span><button data-ser="s-prev"><i class="ln dash"></i>ปีก่อนช่วงเดียวกัน</button></span>` : ''}${hasBase ? `<span><button data-ser="s-med"><i class="ln med"></i>มัธยฐาน 5 ปี • <i class="ln org"></i>${ratioOrange}× มัธยฐาน</button></span>` : ref ? '<span><i class="ln ref"></i>ระดับเฉลี่ยจังหวัด</span>' : '<span class="muted">ยังไม่มีค่ามัธยฐาน 5 ปี</span>'}<span class="muted sm">คลิกที่คำอธิบายเพื่อซ่อน/แสดง</span></div></div>`;
 }
 
 export function heatmap(rowsLbl, weeks, matrix, provN = 0) {
