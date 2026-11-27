@@ -804,6 +804,13 @@ function prevYearSummary(m) {
 }
 
 // มาตรการเฝ้าระวัง (ใช้ใน Info แทน "สรุปสถานการณ์"): รวม 10 โรค = เน้นโรคที่สูงกว่าปกติ/เฝ้าระวัง, เลือกโรค = มาตรการของโรคนั้น
+function tambonLines(dc, d) {
+  const T = (DB.tambonYear || []).filter(x => +x.year_be === S.y && x.district_code === dc && x.disease_id === d).sort((a, b) => (b.cases === '<3' ? 0 : +b.cases) - (a.cases === '<3' ? 0 : +a.cases));
+  if (!T.length) return ['ยังไม่มีข้อมูลผู้ป่วยรายตำบลของอำเภอนี้'];
+  const nm = x => 'ต.' + (DB.tambonName?.[x.subdistrict_code] || ('รหัส ' + x.subdistrict_code.slice(-2)));
+  const top = T.slice(0, 8).map(x => `${nm(x)} ${x.cases === '<3' ? 'น้อยกว่า 3' : fmt(+x.cases)} ราย`);
+  return T.length > 8 ? [...top, `และอีก ${T.length - 8} ตำบล`] : top;
+}
 function measureLines(m, r) {
   const Z = id => DB.config.diseases.find(z => z.id === id) || { measures: [] };
   const clean = t => t.replace(/\s*\((Death review|608)\)/g, '');
@@ -844,7 +851,7 @@ function infoModel(dc, d = S.d) {
     office: DB.config.office, area: distName(dc), period: periodLabel(m), weekText: m.has ? `สัปดาห์ระบาดวิทยาที่ ${m.week.week}` : '',
     cases: m.tot.c, deaths: m.tot.x, change: m.change ?? (pv && pv.samePeriod ? pctChange(m.tot.c, pv.rows.reduce((a, r) => a + (r?.cases || 0), 0)) : null), weekDelta: m.weekDelta, changeNote: 'ไม่มีข้อมูลปีก่อน', demo: S.demo,
     rows: m.per.map(r => ({ name: r.name, cases: r.cases, deaths: r.deaths, rate: r.rate, cfr: r.cfr, level: r.level })),
-    summary: measureLines(m, r), boxTitle: r ? `มาตรการเฝ้าระวัง: ${r.name}` : 'มาตรการเฝ้าระวังสัปดาห์นี้', source: DB.config.source_text + (m.source === 'summary' ? ' • รายงานประจำสัปดาห์ สสจ.อุบลราชธานี' : ''), asOfText: m.has ? `ข้อมูล ณ ${thDate(m.cut, false)}${m.partialWeek ? ` (รวมวันในสัปดาห์ที่ ${m.partialWeek.week} ที่ยังไม่ครบ)` : ''}` : '', url: DB.config.dashboard_url, has: m.has
+    summary: r ? (dc !== 'ALL' ? tambonLines(dc, r.id) : []) : measureLines(m, null), boxTitle: r ? (dc !== 'ALL' ? `ตำบลที่พบผู้ป่วย${r.name} (สะสม พ.ศ. ${S.y})` : '') : 'มาตรการเฝ้าระวังสัปดาห์นี้', source: DB.config.source_text + (m.source === 'summary' ? ' • รายงานประจำสัปดาห์ สสจ.อุบลราชธานี' : ''), asOfText: m.has ? `ข้อมูล ณ ${thDate(m.cut, false)}${m.partialWeek ? ` (รวมวันในสัปดาห์ที่ ${m.partialWeek.week} ที่ยังไม่ครบ)` : ''}` : '', url: DB.config.dashboard_url, has: m.has
   };
 }
 
@@ -856,7 +863,7 @@ function pageInfo() {
     <div class="info-opts">
       ${needD ? `<label>โรค<select id="fd2"><option value="ALL">รวม 10 โรค</option>${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
       ${needDc ? `<label>พื้นที่<select id="fdc2"><option value="ALL">ทั้งจังหวัด</option>${DB.districts.map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
-      ${S.tpl !== 'situation' ? `<label>โทนสี<select id="ithm">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${S.theme === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>` : ''}
+      ${true ? `<label>โทนสี<select id="ithm">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${S.theme === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>` : ''}
       <label>ขนาด<select id="isize">${Object.entries(SIZES).filter(([k]) => S.tpl === 'situation' || k !== 'a4').map(([k, v]) => `<option value="${k}" ${S.size === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
       <div class="info-btns"><button class="btn" id="copyimg">${ico('image', 16)} คัดลอกภาพ</button><button class="btn ghost" id="dl">${ico('down', 16)} PNG</button>${needDc ? `<button class="btn ghost" id="dlall">${ico('down', 16)} ครบ 25 อำเภอ</button>` : ''}</div>
     </div><div id="dlmsg" class="muted"></div>
@@ -984,7 +991,7 @@ async function drawInfo() {
   const cv = $('#cv'); if (!cv) return;
   if (!TEMPLATES[S.tpl]) S.tpl = 'situation';
   if (S.tpl !== 'situation') { if (S.size === 'a4') S.size = 'ppt'; await drawTemplate(cv, info2Model(), S.tpl, SIZES[S.size]); return; }
-  await drawInfographic(cv, infoModel(S.dc), S.size);
+  await drawInfographic(cv, infoModel(S.dc), S.size, THEMES[S.theme]);
 }
 function downloadCanvas(cv, name) { return new Promise(res => cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); res(); }, 300); }, 'image/png')); }
 const TPLN = { levels: 'เทียบ3ระดับ', district: 'รายอำเภอ', weekly: 'แนวโน้ม25อำเภอ', dds: 'คุณภาพDDS' };
@@ -1028,7 +1035,7 @@ function bind() {
     if (t.id === 'dl') return downloadCanvas($('#cv'), fileName(S.dc));
     if (t.id === 'dlall') {
       const msg = $('#dlmsg'); const cv = document.createElement('canvas'); const list = ['ALL', ...DB.districts.map(d => d.code)];
-      for (let i = 0; i < list.length; i++) { msg.textContent = `กำลังสร้าง ${i + 1}/${list.length} …`; await drawInfographic(cv, infoModel(list[i]), S.size); await downloadCanvas(cv, fileName(list[i])); }
+      for (let i = 0; i < list.length; i++) { msg.textContent = `กำลังสร้าง ${i + 1}/${list.length} …`; await drawInfographic(cv, infoModel(list[i]), S.size, THEMES[S.theme]); await downloadCanvas(cv, fileName(list[i])); }
       msg.textContent = `ดาวน์โหลดครบ ${list.length} ภาพ ✓ (ถ้าเบราว์เซอร์ถาม ให้กด "อนุญาตให้ดาวน์โหลดหลายไฟล์")`;
     }
   });
