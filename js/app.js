@@ -798,17 +798,17 @@ function infoModel(dc, d = S.d) {
     office: DB.config.office, area: distName(dc), period: periodLabel(m), weekText: m.has ? `สัปดาห์ระบาดวิทยาที่ ${m.week.week}` : '',
     cases: m.tot.c, deaths: m.tot.x, change: m.change ?? (pv && pv.samePeriod ? pctChange(m.tot.c, pv.rows.reduce((a, r) => a + (r?.cases || 0), 0)) : null), weekDelta: m.weekDelta, changeNote: 'ไม่มีข้อมูลปีก่อน', demo: S.demo,
     rows: m.per.map(r => ({ name: r.name, cases: r.cases, deaths: r.deaths, rate: r.rate, cfr: r.cfr, level: r.level })),
-    summary: r ? diseaseLines(m, r, di, pv).slice(1) : summaryLines(m).slice(1), source: DB.config.source_text + (m.source === 'summary' ? ' • รายงานประจำสัปดาห์ สสจ.อุบลราชธานี' : ''), asOfText: m.has ? `ข้อมูล ณ ${thDate(m.cut, false)}${m.partialWeek ? ` (รวมวันในสัปดาห์ที่ ${m.partialWeek.week} ที่ยังไม่ครบ)` : ''}` : '', url: DB.config.dashboard_url, has: m.has
+    summary: r ? diseaseLines(m, r, di, pv).slice(1) : summaryLines(m).slice(1), source: DB.config.source_text + (m.source === 'summary' ? ' • รายงานประจำสัปดาห์ สสจ.อุบลราชธานี' : '') + ' • ข้อมูลรวม ไม่ระบุตัวบุคคล (PDPA)', asOfText: m.has ? `ข้อมูล ณ ${thDate(m.cut, false)}${m.partialWeek ? ` (รวมวันในสัปดาห์ที่ ${m.partialWeek.week} ที่ยังไม่ครบ)` : ''}` : '', url: DB.config.dashboard_url, has: m.has
   };
 }
 
 function pageInfo() {
-  const needD = ['levels', 'district', 'weekly', 'situation'].includes(S.tpl), needDc = S.tpl === 'situation';
+  const needD = ['levels', 'district', 'weekly', 'situation', 'public'].includes(S.tpl), needDc = ['situation', 'public'].includes(S.tpl);
   return `<header class="hero"><div><div class="eyebrow">${esc(DB.config.office)}</div><h1>สร้างภาพ Info</h1><div class="sub">เลือกรูปแบบ → ตั้งค่า → คัดลอกไปวางใน PowerPoint / LINE ได้ทันที</div></div></header>
   <div class="card info-bar">
     <div class="tpls">${Object.entries(TEMPLATES).map(([k, v]) => `<button class="tpl ${S.tpl === k ? 'on' : ''}" data-tpl="${k}">${esc(v)}</button>`).join('')}</div>
     <div class="info-opts">
-      ${needD ? `<label>โรค<select id="fd2"><option value="ALL">รวม 10 โรค</option>${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
+      ${needD ? `<label>โรค<select id="fd2">${S.tpl === 'public' ? '' : '<option value="ALL">รวม 10 โรค</option>'}${DB.config.diseases.map(d => `<option value="${d.id}" ${S.d === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
       ${needDc ? `<label>พื้นที่<select id="fdc2"><option value="ALL">ทั้งจังหวัด</option>${DB.districts.map(d => `<option value="${d.code}" ${S.dc === d.code ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
       ${S.tpl !== 'situation' ? `<label>โทนสี<select id="ithm">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${S.theme === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>` : ''}
       <label>ขนาด<select id="isize">${Object.entries(SIZES).filter(([k]) => S.tpl === 'situation' || k !== 'a4').map(([k, v]) => `<option value="${k}" ${S.size === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
@@ -836,6 +836,20 @@ function info2Model() {
   if (F.length) { const rows = DB.districts.map(x => { const fs = F.filter(f => f.district_code === x.code); const n = fs.reduce((a, f) => a + +f.total, 0), r = fs.reduce((a, f) => a + +f.reported, 0); return { name: x.name, n, r, p: n ? r / n * 100 : 0 }; }).filter(r => r.n);
     const n = rows.reduce((a, r) => a + r.n, 0), r = rows.reduce((a, o) => a + o.r, 0), rep = F.reduce((a, f) => a + +f.reports, 0), tim = F.reduce((a, f) => a + +f.timely, 0);
     base.dds = { rows, n, r, cov: n ? r / n * 100 : 0, tim: rep ? tim / rep * 100 : null, full: rows.filter(o => o.p >= 100).length, period: F[0]?.period_label || '' }; }
+  // ② ประชาชน
+  const PM = DB.publicMsg, pid = d === 'ALL' ? (m.per.find(r => r.level === 'red' || r.level === 'orange') || m.per[0]).id : d;
+  if (PM?.diseases?.[pid]) { const mm = model(S.dc), r = mm.per.find(o => o.id === pid), msg = PM.diseases[pid], lv = r?.level;
+    const hi = lv === 'red' || lv === 'orange', mid = lv === 'yellow';
+    base.pub = { name: dName(pid), area: S.dc === 'ALL' ? 'จังหวัดอุบลราชธานี' : 'อำเภอ' + distName(S.dc), week: m.week?.week ?? '', ...msg, hotline: PM.hotline || 'สายด่วนกรมควบคุมโรค 1422',
+      color: hi ? '#C62828' : mid ? '#D98200' : '#0E7A50',
+      headline: hi ? `⚠ ${dName(pid)} พบผู้ป่วยมากกว่าปกติ ขอให้ระมัดระวัง` : mid ? `${dName(pid)} เริ่มพบผู้ป่วยเพิ่มขึ้น ขอให้ป้องกัน` : `${dName(pid)} สถานการณ์ปกติ แต่ยังควรป้องกัน`,
+      detail: `ปีนี้พบผู้ป่วย ${fmt(r?.cases)} ราย${r?.deaths ? ` เสียชีวิต ${fmt(r.deaths)} ราย` : ''}${r?.ratio == null ? '' : r.ratio >= 1.2 ? ` • 4 สัปดาห์ล่าสุดพบมากกว่าปีปกติ ${fmt(r.ratio, 1)} เท่า` : r.ratio <= 0.8 ? ' • 4 สัปดาห์ล่าสุดพบน้อยกว่าปีปกติ' : ' • 4 สัปดาห์ล่าสุดใกล้เคียงปีปกติ'}` }; }
+  // ③ แจ้งเตือนอำเภอ
+  if (m.hasDds) { const items = [];
+    for (const z of DB.config.diseases) { const G = districtSignals(m, z.id); for (const r of G.rows) if (r.rr != null && r.rr >= 1.5 && r.rec >= 5) items.push({ district: r.x.name, disease: z.name, cases: r.rec, rr: r.rr, todo: r.sig[1] ? 'เพิ่มขึ้นเร็ว: ค้นหาผู้ป่วยเพิ่ม + สื่อสารความเสี่ยง' : 'ทบทวนรายชื่อใน DDS ค้นหาแหล่งโรค' }); }
+    items.sort((a, b) => b.rr - a.rr);
+    const wL = epiWeek(m.alertT, S.y - 543).week, cl = detectClusters(DB, m.alertT);
+    base.alert = { wL, w0: Math.max(1, wL - 3), items, clusters: cl.map(o => ({ disease: dName(o.d), district: distName(o.dc), where: o.sd.startsWith('ไม่ระบุ') ? 'ระดับอำเภอ' : 'ตำบล ' + o.sd.replace('รหัส ', '').slice(-2), cases: o.cases, period: `${thDate(o.first)}–${thDate(o.last + 6 * DAY)}` })) }; }
   return base;
 }
 

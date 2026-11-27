@@ -3,7 +3,9 @@ import { fmt } from './data.js';
 import { centroid } from './map.js';
 
 export const TEMPLATES = {
-  situation: 'สถานการณ์ 10 โรค / การ์ดรายโรค',
+  situation: '① สรุปสถานการณ์ (ทางการ/ประชุม/ผู้บริหาร)',
+  public: '② สื่อสารความเสี่ยงสำหรับประชาชน',
+  alert: '③ สรุปแจ้งเตือนพื้นที่/อำเภอ',
   levels: 'เทียบประเทศ • เขต 10 • จังหวัด',
   district: 'แผนที่ + สถานะรายอำเภอ (รายโรค)',
   weekly: '25 อำเภอ × 12 สัปดาห์ (รายโรค)',
@@ -38,10 +40,10 @@ async function frame(canvas, m, size, title, sub) {
   c.fillStyle = T.acc; c.font = F('700', land ? 26 : 26); c.fillText(sub, tx, land ? 150 : 156);
   if (!land) { c.fillStyle = 'rgba(255,255,255,.8)'; c.font = F('400', 20, 'Sarabun'); c.fillText(m.weekText + ' • ' + m.asOf, tx, 190); }
   else { c.textAlign = 'right'; c.fillStyle = '#fff'; c.font = F('700', 30); c.fillText(m.weekText, W - 60, 92); c.fillStyle = 'rgba(255,255,255,.8)'; c.font = F('400', 21, 'Sarabun'); c.fillText(m.asOf, W - 60, 128); c.textAlign = 'left'; }
-  const fh = land ? 64 : 84; c.fillStyle = T.a; c.fillRect(0, H - fh, W, fh);
-  c.fillStyle = '#fff'; c.font = F('600', 19); c.fillText(m.source, 56, H - (land ? 26 : 48));
-  if (!land) { c.fillStyle = 'rgba(255,255,255,.7)'; c.font = F('400', 17, 'Sarabun'); c.fillText(m.url || '', 56, H - 20); }
-  else if (m.url) { c.textAlign = 'right'; c.fillStyle = 'rgba(255,255,255,.7)'; c.font = F('400', 18, 'Sarabun'); c.fillText(m.url, W - 56, H - 26); c.textAlign = 'left'; }
+  const fh = land ? 70 : 84; c.fillStyle = T.a; c.fillRect(0, H - fh, W, fh);
+  c.fillStyle = '#fff'; c.font = F('600', land ? 18 : 16); c.fillText(m.source, 56, H - (land ? 36 : 54));
+  c.fillStyle = 'rgba(255,255,255,.72)'; c.font = F('400', land ? 15 : 14, 'Sarabun'); c.fillText(`${m.weekText} • ${m.asOf} • ข้อมูลรวม ไม่ระบุตัวบุคคล (PDPA)`, 56, H - (land ? 14 : 32));
+  if (land && m.url) { c.textAlign = 'right'; c.fillStyle = 'rgba(255,255,255,.7)'; c.font = F('400', 18, 'Sarabun'); c.fillText(m.url, W - 56, H - 26); c.textAlign = 'left'; }
   return { c, W, H, land, T, top: hh + 28, bottom: H - fh - 28 };
 }
 
@@ -156,12 +158,63 @@ function drawDds(f, m) {
     c.fillStyle = r.p >= 100 ? '#16A477' : r.p >= 80 ? '#E0A800' : '#D93025'; rr(c, bx, yy + rh / 2 - 8, Math.max(6, bw * r.p / 100), 16, 8); c.fill();
     c.fillStyle = '#10234A'; c.font = F('700', land ? 18 : 15); c.fillText(`${fmt(r.p, 1)}%`, bx + bw + 12, mid); c.fillStyle = '#5B6B86'; c.font = F('400', land ? 16 : 13, 'Sarabun'); c.fillText(`${r.r}/${r.n}`, bx + bw + (land ? 86 : 74), mid); });
 }
+// ---------- ② สื่อสารความเสี่ยงสำหรับประชาชน ----------
+function wrap(c, text, x, y, maxW, lh) { let line = '', yy = y; const out = [];
+  for (const w of text.split(/(?<=\s)/)) { const t = line + w; if (c.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t;
+    while (c.measureText(line).width > maxW) { let k = line.length; while (k > 1 && c.measureText(line.slice(0, k)).width > maxW) k--; out.push(line.slice(0, k)); line = line.slice(k); } }
+  if (line) out.push(line);
+  out.forEach((l, i) => c.fillText(l.trim(), x, yy + i * lh)); return out.length * lh; }
+function drawPublic(f, m) {
+  const { c, W, H, land, T, top, bottom } = f, P = m.pub; if (!P) return note(f, 'เลือกโรคหนึ่งโรคเพื่อสร้างภาพสื่อสารประชาชน');
+  // status band
+  const bh = land ? 120 : 150; c.fillStyle = P.color; rr(c, 56, top, W - 112, bh, 18); c.fill();
+  c.fillStyle = '#fff'; c.font = F('700', land ? 44 : 38); c.fillText(P.headline, 92, top + (land ? 58 : 62));
+  c.font = F('400', land ? 26 : 24, 'Sarabun'); wrap(c, P.detail, 92, top + (land ? 98 : 106), W - 220, land ? 30 : 30);
+  const y0 = top + bh + 26, cols = [['อาการสำคัญ', P.sym, '#174EA6', '🩺'], ['ป้องกันอย่างไร', P.pre, '#0F7C74', '🛡️'], ['รีบไปพบแพทย์เมื่อ', P.doc, '#D93025', '🚑']];
+  const n = 3, gap = 22, cw = land ? (W - 112 - gap * 2) / 3 : W - 112, ch = land ? bottom - y0 - 70 : (bottom - y0 - 90 - gap * 2) / 3;
+  cols.forEach(([t, items, col, ic], i) => { const x = land ? 56 + i * (cw + gap) : 56, y = land ? y0 : y0 + i * (ch + gap);
+    card(c, x, y, cw, ch); c.fillStyle = col; rr(c, x, y, cw, land ? 70 : 58, 16); c.fill(); c.fillRect(x, y + 40, cw, (land ? 30 : 18));
+    c.fillStyle = '#fff'; c.font = F('700', land ? 32 : 28); c.fillText(`${ic}  ${t}`, x + 24, y + (land ? 47 : 40));
+    let yy = y + (land ? 124 : 88); const fs = land ? 31 : 24, lh = fs * (land ? 1.4 : 1.3);
+    for (const it of items) { if (yy > y + ch - 8) break; c.fillStyle = col; c.beginPath(); c.arc(x + 34, yy - fs * 0.35, land ? 8 : 6, 0, 7); c.fill(); c.fillStyle = '#10234A'; c.font = F('500', fs, 'Sarabun'); yy += wrap(c, it, x + 54, yy, cw - 80, lh) + (land ? 22 : 5); } });
+  // hotline strip
+  const hy = bottom - (land ? 52 : 70); c.fillStyle = '#FFF3D6'; rr(c, 56, hy, W - 112, land ? 52 : 62, 14); c.fill();
+  c.fillStyle = '#8A5A00'; c.font = F('700', land ? 26 : 22); c.textAlign = 'center'; c.fillText(`📞 ${P.hotline} • สอบถาม/ปรึกษาได้ที่ รพ.สต. และโรงพยาบาลใกล้บ้าน`, W / 2, hy + (land ? 35 : 40)); c.textAlign = 'left';
+}
+
+// ---------- ③ สรุปแจ้งเตือนพื้นที่/อำเภอ ----------
+function drawAlert(f, m) {
+  const { c, W, land, T, top, bottom } = f, A = m.alert; if (!A) return note(f, 'ยังไม่มีข้อมูลรายอำเภอจาก DDS');
+  const lw = land ? (W - 112) * 0.62 : W - 112, h1 = land ? bottom - top : (bottom - top) * 0.62;
+  card(c, 56, top, lw, h1);
+  c.fillStyle = T.b; c.font = F('700', land ? 28 : 24); c.fillText(`อำเภอที่ต้องเฝ้าระวัง • สัปดาห์ที่ ${A.w0}–${A.wL}`, 84, top + 48);
+  c.fillStyle = '#5B6B86'; c.font = F('400', land ? 18 : 16, 'Sarabun'); c.fillText('อัตราป่วย 4 สัปดาห์ล่าสุด ≥ 1.5 เท่าของจังหวัด และมีผู้ป่วยตั้งแต่ 5 รายขึ้นไป (รายโรค)', 84, top + 78);
+  const cx = land ? [84, 330, 600, 760, 880] : [84, 300, 560, 700, 820];
+  c.font = F('700', land ? 18 : 16); c.fillStyle = '#5B6B86'; ['อำเภอ', 'โรค', 'ผู้ป่วย', 'เทียบจังหวัด', 'สิ่งที่ควรทำ'].forEach((t, i) => c.fillText(t, cx[i], top + 116));
+  const L = A.items.slice(0, land ? 12 : 9), rh = Math.min(56, (h1 - 140) / Math.max(1, L.length));
+  if (!L.length) { c.fillStyle = '#0E7A50'; c.font = F('700', 26); c.fillText('✓ ไม่มีอำเภอที่เข้าเกณฑ์เฝ้าระวังในสัปดาห์นี้', 84, top + 170); }
+  L.forEach((o, i) => { const y = top + 132 + i * rh, mid = y + rh / 2 + 7; if (i % 2 === 0) { c.fillStyle = '#F6F9FE'; c.fillRect(66, y, lw - 20, rh); }
+    c.fillStyle = '#10234A'; c.font = F('700', land ? 21 : 18); c.fillText(o.district, cx[0], mid); c.font = F('500', land ? 20 : 17, 'Sarabun'); c.fillText(o.disease, cx[1], mid);
+    c.font = F('700', land ? 20 : 17); c.fillText(`${o.cases} ราย`, cx[2], mid); pill(c, cx[3], mid, `${o.rr.toFixed(1)}×`, o.rr >= 2 ? '#D93025' : '#F08A24', '#fff', land ? 17 : 15);
+    c.fillStyle = '#5B6B86'; c.font = F('400', land ? 17 : 14, 'Sarabun'); c.fillText(o.todo, cx[4], mid); });
+  // clusters box
+  const x2 = land ? 56 + lw + 22 : 56, y2 = land ? top : top + h1 + 20, w2 = land ? W - x2 - 56 : W - 112, h2 = bottom - y2;
+  card(c, x2, y2, w2, h2); c.fillStyle = '#D93025'; c.font = F('700', land ? 26 : 22); c.fillText(`กลุ่มก้อนที่เข้าเกณฑ์ (${A.clusters.length})`, x2 + 24, y2 + 46);
+  c.fillStyle = '#5B6B86'; c.font = F('400', land ? 16 : 14, 'Sarabun'); c.fillText('ผู้ป่วยโรคเดียวกัน ตำบลเดียวกัน ภายใน 1 ระยะฟักตัว', x2 + 24, y2 + 72);
+  const C = A.clusters.slice(0, land ? 10 : 4), ch2 = Math.min(64, (h2 - 160) / Math.max(1, C.length));
+  C.forEach((o, i) => { const y = y2 + 92 + i * ch2; c.fillStyle = '#FFF4EC'; rr(c, x2 + 16, y, w2 - 32, ch2 - 8, 10); c.fill();
+    c.fillStyle = '#10234A'; c.font = F('700', land ? 19 : 17); c.fillText(`${o.disease} • ${o.district}`, x2 + 30, y + (ch2 - 8) / 2 - 2);
+    c.fillStyle = '#5B6B86'; c.font = F('400', land ? 16 : 14, 'Sarabun'); c.fillText(`${o.where} • ${o.cases} ราย • ${o.period}`, x2 + 30, y + (ch2 - 8) / 2 + 20); });
+  if (!C.length) { c.fillStyle = '#0E7A50'; c.font = F('600', 20); c.fillText('ไม่พบกลุ่มก้อน', x2 + 24, y2 + 120); }
+  c.fillStyle = '#10234A'; c.font = F('700', land ? 18 : 16); c.fillText('สิ่งที่ขอให้พื้นที่ดำเนินการ', x2 + 24, y2 + h2 - (land ? 92 : 70));
+  c.font = F('400', land ? 16 : 14, 'Sarabun'); ['• ทบทวนรายชื่อผู้ป่วยใน DDS ค้นหาผู้ป่วยเพิ่มเติม', '• กลุ่มก้อน: สอบสวนเบื้องต้นและส่งรายงานภายใน 24–48 ชม.', '• สื่อสารความเสี่ยงในชุมชนตามภาพ ② ของแดชบอร์ด'].forEach((t, i) => c.fillText(t, x2 + 24, y2 + h2 - (land ? 64 : 46) + i * (land ? 22 : 18)));
+}
 function note(f, t) { const { c, W, top } = f; c.fillStyle = '#5B6B86'; c.font = F('600', 30); c.fillText(t, 56, top + 60); }
 
 export async function drawTemplate(canvas, m, tpl, size) {
   try { await Promise.all([document.fonts.load('700 40px Anuphan'), document.fonts.load('400 20px Sarabun')]); } catch { }
-  const titles = { levels: ['สถานการณ์เทียบระดับประเทศ เขต จังหวัด', m.diseaseName], district: ['สถานการณ์รายอำเภอ', `${m.diseaseName} • จังหวัดอุบลราชธานี`], weekly: ['ผู้ป่วยรายสัปดาห์ 25 อำเภอ', `${m.diseaseName} • จังหวัดอุบลราชธานี`], dds: ['คุณภาพการรายงานในระบบ DDS (D506)', 'จังหวัดอุบลราชธานี'] };
+  const titles = { public: [m.pub ? m.pub.name : 'สื่อสารความเสี่ยง', m.pub ? m.pub.area : ''], alert: ['สรุปแจ้งเตือนพื้นที่', 'อำเภอที่ต้องเฝ้าระวังและกลุ่มก้อน • จังหวัดอุบลราชธานี'], levels: ['สถานการณ์เทียบระดับประเทศ เขต จังหวัด', m.diseaseName], district: ['สถานการณ์รายอำเภอ', `${m.diseaseName} • จังหวัดอุบลราชธานี`], weekly: ['ผู้ป่วยรายสัปดาห์ 25 อำเภอ', `${m.diseaseName} • จังหวัดอุบลราชธานี`], dds: ['คุณภาพการรายงานในระบบ DDS (D506)', 'จังหวัดอุบลราชธานี'] };
   const [t, s] = titles[tpl]; const f = await frame(canvas, m, size, t, s);
-  ({ levels: drawLevels, district: drawDistrict, weekly: drawWeekly, dds: drawDds })[tpl](f, m);
+  ({ public: drawPublic, alert: drawAlert, levels: drawLevels, district: drawDistrict, weekly: drawWeekly, dds: drawDds })[tpl](f, m);
   return canvas;
 }
